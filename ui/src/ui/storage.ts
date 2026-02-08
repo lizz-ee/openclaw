@@ -1,22 +1,44 @@
 const KEY = "openclaw.control.settings.v1";
 
-import type { ThemeMode } from "./theme";
+import type { ThemeName } from "./theme";
+import type { CardId, CardState, SavedWorkspace } from "./canvas/canvas-types";
 
 export type UiSettings = {
   gatewayUrl: string;
   token: string;
   sessionKey: string;
   lastActiveSessionKey: string;
-  theme: ThemeMode;
-  chatFocusMode: boolean;
+  theme: ThemeName;
+  crtEffects: boolean;
   chatShowThinking: boolean;
-  splitRatio: number; // Sidebar split ratio (0.4 to 0.7, default 0.6)
-  navCollapsed: boolean; // Collapsible sidebar state
-  navGroupsCollapsed: Record<string, boolean>; // Which nav groups are collapsed
+  canvasCards: Record<string, CardState> | null;
+  workspaces: SavedWorkspace[];
 };
 
 export function loadSettings(): UiSettings {
+  // start.sh passes ?resetSettings=1 to clear stale data on fresh launch
+  if (typeof location !== "undefined") {
+    const params = new URLSearchParams(location.search);
+    if (params.get("resetSettings") === "1") {
+      localStorage.removeItem(KEY);
+      // Clean the URL so reloads don't keep resetting
+      params.delete("resetSettings");
+      const clean = params.toString();
+      const newUrl = location.pathname + (clean ? `?${clean}` : "") + location.hash;
+      history.replaceState(null, "", newUrl);
+    }
+  }
+
   const defaultUrl = (() => {
+    // Electron file:// has no host; fall back to localhost gateway
+    if (location.protocol === "file:" || !location.host) {
+      return "ws://127.0.0.1:18789";
+    }
+    // Vite dev server runs on a non-gateway port; connect to gateway directly
+    const port = location.port;
+    if (port && port !== "18789") {
+      return `ws://${location.hostname}:18789`;
+    }
     const proto = location.protocol === "https:" ? "wss" : "ws";
     return `${proto}://${location.host}`;
   })();
@@ -26,12 +48,11 @@ export function loadSettings(): UiSettings {
     token: "",
     sessionKey: "main",
     lastActiveSessionKey: "main",
-    theme: "system",
-    chatFocusMode: false,
+    theme: "grid",
+    crtEffects: true,
     chatShowThinking: true,
-    splitRatio: 0.6,
-    navCollapsed: false,
-    navGroupsCollapsed: {},
+    canvasCards: null,
+    workspaces: [],
   };
 
   try {
@@ -39,10 +60,19 @@ export function loadSettings(): UiSettings {
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<UiSettings>;
     return {
-      gatewayUrl:
-        typeof parsed.gatewayUrl === "string" && parsed.gatewayUrl.trim()
-          ? parsed.gatewayUrl.trim()
-          : defaults.gatewayUrl,
+      gatewayUrl: (() => {
+        const saved = typeof parsed.gatewayUrl === "string" ? parsed.gatewayUrl.trim() : "";
+        if (!saved) return defaultUrl;
+        // If saved URL points at the current page's host:port (auto-detected, not gateway),
+        // override with the correct gateway URL to avoid stale dev-server URLs
+        try {
+          const u = new URL(saved.replace(/^ws/, "http"));
+          if (u.hostname === location.hostname && u.port === location.port && u.port !== "18789") {
+            return defaultUrl;
+          }
+        } catch { /* keep saved */ }
+        return saved;
+      })(),
       token: typeof parsed.token === "string" ? parsed.token : defaults.token,
       sessionKey:
         typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()
@@ -54,27 +84,20 @@ export function loadSettings(): UiSettings {
           : (typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()) ||
             defaults.lastActiveSessionKey,
       theme:
-        parsed.theme === "light" || parsed.theme === "dark" || parsed.theme === "system"
+        parsed.theme === "grid" || parsed.theme === "outlands" || parsed.theme === "endofline"
           ? parsed.theme
           : defaults.theme,
-      chatFocusMode:
-        typeof parsed.chatFocusMode === "boolean" ? parsed.chatFocusMode : defaults.chatFocusMode,
+      crtEffects:
+        typeof parsed.crtEffects === "boolean" ? parsed.crtEffects : defaults.crtEffects,
       chatShowThinking:
         typeof parsed.chatShowThinking === "boolean"
           ? parsed.chatShowThinking
           : defaults.chatShowThinking,
-      splitRatio:
-        typeof parsed.splitRatio === "number" &&
-        parsed.splitRatio >= 0.4 &&
-        parsed.splitRatio <= 0.7
-          ? parsed.splitRatio
-          : defaults.splitRatio,
-      navCollapsed:
-        typeof parsed.navCollapsed === "boolean" ? parsed.navCollapsed : defaults.navCollapsed,
-      navGroupsCollapsed:
-        typeof parsed.navGroupsCollapsed === "object" && parsed.navGroupsCollapsed !== null
-          ? parsed.navGroupsCollapsed
-          : defaults.navGroupsCollapsed,
+      canvasCards:
+        typeof parsed.canvasCards === "object" && parsed.canvasCards !== null
+          ? parsed.canvasCards
+          : defaults.canvasCards,
+      workspaces: Array.isArray(parsed.workspaces) ? parsed.workspaces : defaults.workspaces,
     };
   } catch {
     return defaults;

@@ -1,12 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { Tab } from "./navigation";
 import { setTabFromRoute } from "./app-settings";
 
-type SettingsHost = Parameters<typeof setTabFromRoute>[0] & {
-  logsPollInterval: number | null;
-  debugPollInterval: number | null;
-};
+type SettingsHost = Parameters<typeof setTabFromRoute>[0];
 
 const createHost = (tab: Tab): SettingsHost => ({
   settings: {
@@ -14,15 +11,14 @@ const createHost = (tab: Tab): SettingsHost => ({
     token: "",
     sessionKey: "main",
     lastActiveSessionKey: "main",
-    theme: "system",
-    chatFocusMode: false,
+    theme: "grid",
+    crtEffects: true,
     chatShowThinking: true,
-    splitRatio: 0.6,
-    navCollapsed: false,
-    navGroupsCollapsed: {},
+    canvasCards: null,
+    workspaces: [],
   },
-  theme: "system",
-  themeResolved: "dark",
+  theme: "grid",
+  themeResolved: "grid",
   applySessionKey: "main",
   sessionKey: "main",
   tab,
@@ -32,40 +28,26 @@ const createHost = (tab: Tab): SettingsHost => ({
   eventLog: [],
   eventLogBuffer: [],
   basePath: "",
-  themeMedia: null,
-  themeMediaHandler: null,
-  logsPollInterval: null,
-  debugPollInterval: null,
 });
 
 describe("setTabFromRoute", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("starts and stops log polling based on the tab", () => {
+  it("updates the tab property", () => {
     const host = createHost("chat");
-
     setTabFromRoute(host, "logs");
-    expect(host.logsPollInterval).not.toBeNull();
-    expect(host.debugPollInterval).toBeNull();
-
-    setTabFromRoute(host, "chat");
-    expect(host.logsPollInterval).toBeNull();
+    expect(host.tab).toBe("logs");
   });
 
-  it("starts and stops debug polling based on the tab", () => {
-    const host = createHost("chat");
-
-    setTabFromRoute(host, "debug");
-    expect(host.debugPollInterval).not.toBeNull();
-    expect(host.logsPollInterval).toBeNull();
-
+  it("resets chatHasAutoScrolled when switching to chat", () => {
+    const host = createHost("logs");
+    host.chatHasAutoScrolled = true;
     setTabFromRoute(host, "chat");
-    expect(host.debugPollInterval).toBeNull();
+    expect(host.chatHasAutoScrolled).toBe(false);
+  });
+
+  it("does not reset chatHasAutoScrolled for non-chat tabs", () => {
+    const host = createHost("chat");
+    host.chatHasAutoScrolled = true;
+    setTabFromRoute(host, "logs");
+    expect(host.chatHasAutoScrolled).toBe(true);
   });
 });

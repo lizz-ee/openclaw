@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Taskbar Concepts</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --cyan: #00fce8;
+    --cyan-bright: #70fffa;
+    --cyan-mid: #00d4c0;
+    --cyan-dim: #00897a;
+    --cyan-border: rgba(0,252,232,0.22);
+    --cyan-glow: rgba(0,252,232,0.55);
+    --orange: #ffaa20;
+    --orange-bright: #ffcc66;
+    --orange-dim: rgba(255,170,32,0.15);
+    --orange-glow: rgba(255,170,32,0.5);
+    --green: #00ff88;
+    --red: #ff4466;
+    --bg: #000;
+    --panel: rgba(0,4,4,0.92);
+    --text: #00fce8;
+    --text-dim: #00897a;
+    --text-bright: #e0fffc;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #000;
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+
+  /* CRT lite */
+  .crt {
+    position:fixed; inset:0; z-index:9999; pointer-events:none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.1) 1px, rgba(0,0,0,0.1) 2px);
+  }
+
+  /* Grid bg */
+  .gridbg {
+    position:fixed; inset:0; z-index:0;
+    background:
+      radial-gradient(circle, rgba(0,252,232,0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* Layout */
+  .page {
+    position: relative; z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 30px;
+  }
+
+  h1 {
+    font-size: 14px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan-glow);
+    margin-bottom: 30px;
+    border-bottom: 1px solid var(--cyan-border);
+    padding-bottom: 10px;
+  }
+
+  .section {
+    margin-bottom: 60px;
+  }
+  .section-label {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--orange);
+    text-shadow: 0 0 6px var(--orange-glow);
+    margin-bottom: 6px;
+  }
+  .section-desc {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+
+  /* ═══════════════════════════════════════
+     CONCEPT 1: DOCK BAR (bottom-center)
+     macOS dock style — icon buttons that
+     glow when panel is open
+     ═══════════════════════════════════════ */
+  .demo-frame {
+    background: rgba(0,4,4,0.6);
+    border: 1px solid var(--cyan-border);
+    border-radius: 4px;
+    height: 340px;
+    position: relative;
+    overflow: hidden;
+  }
+  .demo-frame::before { content:''; position:absolute; top:-1px; left:-1px; width:10px; height:10px; border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); filter:drop-shadow(0 0 3px var(--cyan-glow)); }
+  .demo-frame::after { content:''; position:absolute; bottom:-1px; right:-1px; width:10px; height:10px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); filter:drop-shadow(0 0 3px var(--cyan-glow)); }
+
+  /* Simulated HUD inside frame */
+  .frame-hud-top {
+    height: 28px;
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 10px;
+    background: rgba(0,0,0,0.8);
+    border-bottom: 1px solid var(--cyan-border);
+    font-size: 9px; letter-spacing: 2px; color: var(--text-dim);
+  }
+  .frame-hud-brand { color: var(--cyan); text-shadow: 0 0 6px var(--cyan-glow); letter-spacing: 3px; }
+
+  /* Some fake mini cards inside */
+  .mini-card {
+    position: absolute;
+    background: var(--panel);
+    border: 1px solid var(--cyan-border);
+    font-size: 8px;
+    padding: 4px 6px;
+    color: var(--text-dim);
+  }
+  .mini-card .mc-title { font-size: 7px; letter-spacing: 1px; color: var(--cyan); margin-bottom: 2px; text-transform: uppercase; }
+
+  /* ── Dock ── */
+  .dock {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 8px;
+    background: rgba(0,4,4,0.92);
+    border: 1px solid var(--cyan-border);
+    border-radius: 6px;
+    box-shadow: 0 0 20px rgba(0,252,232,0.06);
+  }
+  .dock::before { content:''; position:absolute; top:-1px; left:10%; right:10%; height:1px; background:linear-gradient(90deg,transparent,var(--cyan-glow),transparent); opacity:.3; }
+
+  .dock-item {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    border: 1px solid transparent;
+  }
+  .dock-item svg { width: 16px; height: 16px; stroke: var(--text-dim); fill: none; stroke-width: 1.5; transition: all 0.15s; }
+  .dock-item:hover { background: rgba(0,252,232,0.06); }
+  .dock-item:hover svg { stroke: var(--cyan); }
+
+  .dock-item.active {
+    background: rgba(0,252,232,0.08);
+    border-color: rgba(0,252,232,0.15);
+  }
+  .dock-item.active svg { stroke: var(--cyan); filter: drop-shadow(0 0 3px var(--cyan-glow)); }
+  /* Active dot under icon */
+  .dock-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 1px;
+    width: 4px; height: 2px;
+    background: var(--cyan);
+    box-shadow: 0 0 4px var(--cyan-glow);
+    border-radius: 1px;
+  }
+
+  .dock-item .dock-label {
+    display: none;
+    position: absolute;
+    top: -22px;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--cyan);
+    background: rgba(0,4,4,0.95);
+    border: 1px solid var(--cyan-border);
+    padding: 2px 6px;
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+  .dock-item:hover .dock-label { display: block; }
+
+  .dock-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--cyan-border);
+    margin: 0 3px;
+  }
+
+  /* ═══════════════════════════════════════
+     CONCEPT 2: SIDEBAR STRIP (left edge)
+     Vertical icon strip with text labels,
+     sections, and open/close toggles
+     ═══════════════════════════════════════ */
+  .sidebar-strip {
+    position: absolute;
+    top: 28px; left: 0; bottom: 0;
+    width: 52px;
+    background: rgba(0,0,0,0.85);
+    border-right: 1px solid var(--cyan-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    gap: 2px;
+    overflow-y: auto;
+  }
+  .sidebar-strip::after {
+    content: '';
+    position: absolute; top: 0; right: -1px; bottom: 0;
+    width: 1px;
+    background: linear-gradient(180deg, var(--cyan-glow), transparent 20%, transparent 80%, var(--cyan-glow));
+    opacity: 0.2;
+  }
+
+  .strip-item {
+    width: 40px;
+    height: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+  }
+  .strip-item svg { width: 15px; height: 15px; stroke: var(--text-dim); fill: none; stroke-width: 1.5; transition: stroke 0.12s; }
+  .strip-item .strip-label { font-size: 6px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); transition: color 0.12s; }
+
+  .strip-item:hover { background: rgba(0,252,232,0.04); }
+  .strip-item:hover svg { stroke: var(--cyan); }
+  .strip-item:hover .strip-label { color: var(--cyan); }
+
+  .strip-item.active {
+    background: rgba(0,252,232,0.06);
+  }
+  .strip-item.active svg { stroke: var(--cyan-bright); filter: drop-shadow(0 0 3px var(--cyan-glow)); }
+  .strip-item.active .strip-label { color: var(--cyan); text-shadow: 0 0 4px var(--cyan-glow); }
+  .strip-item.active::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 6px; bottom: 6px;
+    width: 2px;
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan-glow);
+    border-radius: 0 1px 1px 0;
+  }
+
+  .strip-divider {
+    width: 28px;
+    height: 1px;
+    background: rgba(0,252,232,0.08);
+    margin: 4px 0;
+  }
+
+  .strip-group-label {
+    font-size: 6px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(0,252,232,0.2);
+    margin-top: 4px;
+  }
+
+  .strip-spacer { flex: 1; }
+
+  /* ═══════════════════════════════════════
+     CONCEPT 3: COMMAND PALETTE + TOP TABS
+     Minimal top tabs with ⌘K command palette
+     for opening panels by name
+     ═══════════════════════════════════════ */
+  .tab-bar {
+    position: absolute;
+    top: 28px; left: 0; right: 0;
+    height: 30px;
+    display: flex;
+    align-items: stretch;
+    background: rgba(0,0,0,0.8);
+    border-bottom: 1px solid var(--cyan-border);
+    padding: 0 8px;
+    gap: 0;
+    overflow-x: auto;
+  }
+  .tab-bar::-webkit-scrollbar { height: 0; }
+
+  .tab-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 10px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.12s;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    position: relative;
+  }
+  .tab-item svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+  .tab-item:hover { color: var(--cyan); }
+  .tab-item.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+  /* Close button on tabs */
+  .tab-close {
+    width: 10px; height: 10px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.12s;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+  .tab-item:hover .tab-close { opacity: 1; }
+  .tab-close:hover { color: var(--red); }
+
+  .tab-sep { width: 1px; align-self: stretch; margin: 6px 4px; background: rgba(0,252,232,0.08); }
+  .tab-spacer { flex: 1; }
+
+  .tab-add {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 8px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 0.12s;
+  }
+  .tab-add:hover { color: var(--cyan); text-shadow: 0 0 6px var(--cyan-glow); }
+
+  /* Command palette trigger */
+  .cmd-trigger {
+    display: flex; align-items: center; gap: 5px;
+    padding: 0 10px;
+    font-size: 9px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .cmd-trigger:hover { color: var(--cyan); }
+  .cmd-trigger kbd {
+    padding: 1px 4px;
+    border: 1px solid rgba(0,252,232,0.12);
+    font-size: 8px;
+    color: var(--text-dim);
+    font-family: inherit;
+  }
+
+  /* Command palette overlay */
+  .cmd-palette {
+    position: absolute;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 340px;
+    background: var(--panel);
+    border: 1px solid var(--cyan-border);
+    box-shadow: 0 0 40px rgba(0,252,232,0.08);
+    z-index: 100;
+  }
+  .cmd-palette::before { content:''; position:absolute; top:-1px; left:-1px; width:8px; height:8px; border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); filter:drop-shadow(0 0 2px var(--cyan-glow)); }
+  .cmd-palette::after { content:''; position:absolute; bottom:-1px; right:-1px; width:8px; height:8px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); filter:drop-shadow(0 0 2px var(--cyan-glow)); }
+
+  .cmd-input-wrap {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(0,252,232,0.08);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cmd-input-wrap svg { width: 14px; height: 14px; stroke: var(--text-dim); fill: none; stroke-width: 1.5; flex-shrink: 0; }
+  .cmd-input {
+    flex: 1; background: transparent; border: none;
+    color: var(--text-bright); font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; outline: none;
+  }
+
+  .cmd-results { padding: 4px 0; max-height: 200px; overflow-y: auto; }
+  .cmd-result {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .cmd-result:hover, .cmd-result.selected { background: rgba(0,252,232,0.06); }
+  .cmd-result svg { width: 14px; height: 14px; stroke: var(--text-dim); fill: none; stroke-width: 1.5; }
+  .cmd-result:hover svg { stroke: var(--cyan); }
+  .cmd-result-name { flex: 1; color: var(--cyan); }
+  .cmd-result-tag {
+    font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .cmd-result-tag.open { color: var(--green); }
+  .cmd-result.selected .cmd-result-name { text-shadow: 0 0 4px var(--cyan-glow); }
+
+  .cmd-hint {
+    padding: 6px 10px;
+    border-top: 1px solid rgba(0,252,232,0.05);
+    font-size: 8px;
+    color: rgba(0,252,232,0.2);
+    display: flex; gap: 12px;
+  }
+  .cmd-hint kbd { padding: 0 3px; border: 1px solid rgba(0,252,232,0.08); font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="crt"></div>
+<div class="gridbg"></div>
+
+<div class="page">
+  <h1>Taskbar Concepts — The Grid</h1>
+
+  <!-- ═══════════════════════════════════════
+       CONCEPT 1: DOCK BAR
+       ═══════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Concept 1 — Dock Bar</div>
+    <div class="section-desc">
+      Floating dock at bottom-center. Icon-only buttons for each panel.<br>
+      Active panels have a glowing dot underneath. Hover shows label tooltip.<br>
+      Separator between panel groups. Minimal, stays out of the way.
+    </div>
+
+    <div class="demo-frame">
+      <div class="frame-hud-top">
+        <span class="frame-hud-brand">OpenClaw</span>
+        <span>● Gateway</span> <span>● Ollama</span>
+        <div style="flex:1"></div>
+        <span style="color:var(--orange)">CLU:LATEST</span>
+      </div>
+
+      <!-- Fake cards -->
+      <div class="mini-card" style="left:60px;top:50px;width:160px;height:120px;">
+        <div class="mc-title">System</div>
+        Gateway: ONLINE<br>Uptime: 4h 23m<br>Model: clu:latest
+      </div>
+      <div class="mini-card" style="left:240px;top:40px;width:300px;height:200px;">
+        <div class="mc-title">Terminal — CLU</div>
+        user@grid ~$ status<br>[tool] debug.health<br>CLU › All systems nominal...
+      </div>
+      <div class="mini-card" style="right:80px;top:50px;width:160px;height:100px;">
+        <div class="mc-title">Channels</div>
+        ● Discord<br>● Telegram<br>○ iMessage
+      </div>
+
+      <!-- THE DOCK -->
+      <div class="dock">
+        <div class="dock-item active">
+          <span class="dock-label">Chat</span>
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="dock-item active">
+          <span class="dock-label">System</span>
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div class="dock-item active">
+          <span class="dock-label">Channels</span>
+          <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div class="dock-item active">
+          <span class="dock-label">Sessions</span>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="dock-sep"></div>
+        <div class="dock-item active">
+          <span class="dock-label">Activity</span>
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="dock-item active">
+          <span class="dock-label">Log</span>
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="dock-item">
+          <span class="dock-label">Skills</span>
+          <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+        </div>
+        <div class="dock-item">
+          <span class="dock-label">Cron</span>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="dock-sep"></div>
+        <div class="dock-item">
+          <span class="dock-label">Config</span>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg>
+        </div>
+        <div class="dock-item">
+          <span class="dock-label">Debug</span>
+          <svg viewBox="0 0 24 24"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4M12 16h.01"/></svg>
+        </div>
+        <div class="dock-sep"></div>
+        <div class="dock-item">
+          <span class="dock-label">Theme</span>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       CONCEPT 2: SIDEBAR STRIP
+       ═══════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Concept 2 — Sidebar Strip</div>
+    <div class="section-desc">
+      Thin vertical strip on left edge. Icons + tiny labels, grouped by category.<br>
+      Active panels get a left-edge glow bar. Settings/theme at bottom.<br>
+      Always visible, doesn't overlap canvas content.
+    </div>
+
+    <div class="demo-frame">
+      <div class="frame-hud-top">
+        <span class="frame-hud-brand">OpenClaw</span>
+        <span>● Gateway</span> <span>● Ollama</span>
+        <div style="flex:1"></div>
+        <span style="color:var(--orange)">CLU:LATEST</span>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="sidebar-strip">
+        <div class="strip-group-label">CMD</div>
+        <div class="strip-item active">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="strip-label">Chat</span>
+        </div>
+        <div class="strip-item active">
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span class="strip-label">System</span>
+        </div>
+
+        <div class="strip-divider"></div>
+        <div class="strip-group-label">CTRL</div>
+        <div class="strip-item active">
+          <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="strip-label">Chan</span>
+        </div>
+        <div class="strip-item active">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span class="strip-label">Sess</span>
+        </div>
+        <div class="strip-item active">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="strip-label">Feed</span>
+        </div>
+        <div class="strip-item active">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="strip-label">Log</span>
+        </div>
+
+        <div class="strip-divider"></div>
+        <div class="strip-group-label">AGT</div>
+        <div class="strip-item">
+          <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+          <span class="strip-label">Skill</span>
+        </div>
+        <div class="strip-item">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span class="strip-label">Cron</span>
+        </div>
+        <div class="strip-item">
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span class="strip-label">Node</span>
+        </div>
+
+        <div class="strip-spacer"></div>
+        <div class="strip-divider"></div>
+        <div class="strip-item">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06"/></svg>
+          <span class="strip-label">Conf</span>
+        </div>
+        <div class="strip-item">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/></svg>
+          <span class="strip-label">Theme</span>
+        </div>
+      </div>
+
+      <!-- Fake cards offset by sidebar -->
+      <div class="mini-card" style="left:72px;top:50px;width:140px;height:100px;">
+        <div class="mc-title">System</div>
+        Gateway: ONLINE<br>Uptime: 4h 23m
+      </div>
+      <div class="mini-card" style="left:230px;top:40px;width:280px;height:180px;">
+        <div class="mc-title">Terminal — CLU</div>
+        user@grid ~$ ...<br>CLU › nominal...
+      </div>
+      <div class="mini-card" style="right:50px;top:50px;width:140px;height:90px;">
+        <div class="mc-title">Channels</div>
+        ● Discord · ● Telegram
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       CONCEPT 3: TAB BAR + COMMAND PALETTE
+       ═══════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Concept 3 — Tab Bar + Command Palette</div>
+    <div class="section-desc">
+      Open panels shown as tabs in a horizontal bar below HUD. Close via × on hover.<br>
+      "+" button or ⌘K opens a command palette to search and toggle any panel.<br>
+      Most keyboard-friendly. Panel tabs can be reordered.
+    </div>
+
+    <div class="demo-frame">
+      <div class="frame-hud-top">
+        <span class="frame-hud-brand">OpenClaw</span>
+        <span>● Gateway</span> <span>● Ollama</span>
+        <div style="flex:1"></div>
+        <span style="color:var(--orange)">CLU:LATEST</span>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="tab-bar">
+        <div class="tab-item active">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chat
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab-item">
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          System
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab-item">
+          <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3"/></svg>
+          Channels
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab-item">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Sessions
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab-item">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16"/><polyline points="14 2 14 8 20 8"/></svg>
+          Log
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab-sep"></div>
+        <div class="tab-add" title="Add panel">+</div>
+        <div class="tab-spacer"></div>
+        <div class="cmd-trigger">
+          <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <kbd>⌘K</kbd>
+        </div>
+      </div>
+
+      <!-- Command palette (shown as if open) -->
+      <div class="cmd-palette">
+        <div class="cmd-input-wrap">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="cmd-input" value="sk" placeholder="Search panels...">
+        </div>
+        <div class="cmd-results">
+          <div class="cmd-result selected">
+            <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+            <span class="cmd-result-name">Skills</span>
+            <span class="cmd-result-tag">closed</span>
+          </div>
+          <div class="cmd-result">
+            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span class="cmd-result-name">System</span>
+            <span class="cmd-result-tag open">open</span>
+          </div>
+          <div class="cmd-result">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span class="cmd-result-name">Sessions</span>
+            <span class="cmd-result-tag open">open</span>
+          </div>
+        </div>
+        <div class="cmd-hint">
+          <span><kbd>↑↓</kbd> navigate</span>
+          <span><kbd>↵</kbd> toggle</span>
+          <span><kbd>esc</kbd> close</span>
+        </div>
+      </div>
+
+      <!-- Fake cards -->
+      <div class="mini-card" style="left:40px;top:80px;width:150px;height:100px;">
+        <div class="mc-title">System</div>
+        Gateway: ONLINE
+      </div>
+      <div class="mini-card" style="left:210px;top:70px;width:300px;height:160px;">
+        <div class="mc-title">Terminal — CLU</div>
+        user@grid ~$ ...<br>CLU › ...
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

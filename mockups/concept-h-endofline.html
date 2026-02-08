@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Concept H: End of Line</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    /* Electric violet / purple — End of Line Club vibe */
+    --pri: #c470ff;
+    --pri-bright: #e0a0ff;
+    --pri-mid: #a050dd;
+    --pri-dim: #6030a0;
+    --pri-ghost: rgba(196, 112, 255, 0.04);
+    --pri-border: rgba(196, 112, 255, 0.20);
+    --pri-glow: rgba(196, 112, 255, 0.50);
+
+    /* Acid lime accent (Castor's drinks, End of Line neon) */
+    --acc: #b0ff40;
+    --acc-bright: #d0ff80;
+    --acc-dim: rgba(176, 255, 64, 0.15);
+    --acc-glow: rgba(176, 255, 64, 0.45);
+
+    /* Hot white highlight */
+    --white: #f0eeff;
+    --white-glow: rgba(240, 238, 255, 0.4);
+
+    --green: #b0ff40;
+    --red: #ff4466;
+    --bg: #06000c;
+    --panel: rgba(6, 0, 14, 0.90);
+    --text: #c470ff;
+    --text-dim: #7040b0;
+    --text-bright: #eeddff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--pri);
+    font-family: 'Share Tech Mono', monospace;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ═══ CRT — lighter scanlines, more bloom ═══ */
+  .crt-scanlines {
+    position: fixed; inset: 0; z-index: 99999; pointer-events: none;
+    background: repeating-linear-gradient(0deg,
+      transparent, transparent 1px,
+      rgba(0,0,0,0.08) 1px, rgba(0,0,0,0.08) 2px);
+  }
+  .crt-vignette {
+    position: fixed; inset: 0; z-index: 99998; pointer-events: none;
+    background: radial-gradient(ellipse at center,
+      transparent 45%, rgba(6,0,14,0.4) 72%, rgba(6,0,14,0.8) 100%);
+  }
+  /* Purple ambient bloom */
+  .crt-bloom {
+    position: fixed; inset: 0; z-index: 99997; pointer-events: none;
+    box-shadow: inset 0 0 200px rgba(196,112,255,0.02);
+  }
+  /* Subtle color-shift flicker */
+  .crt-flicker {
+    position: fixed; inset: 0; z-index: 99996; pointer-events: none;
+    animation: flicker 4s ease-in-out infinite alternate;
+  }
+  @keyframes flicker {
+    0% { box-shadow: inset 0 0 80px rgba(196,112,255,0.01); }
+    50% { box-shadow: inset 0 0 120px rgba(176,255,64,0.005); }
+    100% { box-shadow: inset 0 0 80px rgba(196,112,255,0.01); }
+  }
+
+  /* ═══ CANVAS ═══ */
+  .canvas-viewport {
+    position: fixed; inset: 0; overflow: hidden; cursor: grab; z-index: 1;
+  }
+  .canvas-viewport:active { cursor: grabbing; }
+
+  .canvas-world {
+    position: absolute; width: 6000px; height: 4000px;
+    /* Crosshatch grid — violet */
+    background:
+      linear-gradient(rgba(196,112,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(196,112,255,0.025) 1px, transparent 1px),
+      radial-gradient(circle, rgba(176,255,64,0.02) 1px, transparent 1px);
+    background-size: 48px 48px, 48px 48px, 240px 240px;
+    background-position: 0 0, 0 0, 24px 24px;
+    transform-origin: 0 0;
+  }
+
+  /* Geometry */
+  .canvas-geo { position: absolute; inset: 0; pointer-events: none; }
+  .canvas-geo svg { width: 100%; height: 100%; overflow: visible; }
+  .cg-l { stroke: rgba(196,112,255,0.04); stroke-width: 0.5; fill: none; }
+  .cg-lb { stroke: rgba(196,112,255,0.09); stroke-width: 0.5; fill: none; }
+  .cg-r { stroke: rgba(196,112,255,0.025); stroke-width: 0.5; fill: none; }
+  .cg-d { fill: rgba(196,112,255,0.14); }
+  .cg-acc { stroke: rgba(176,255,64,0.05); stroke-width: 0.5; fill: none; }
+  .cg-acc-b { stroke: rgba(176,255,64,0.10); stroke-width: 0.5; fill: none; }
+  .cg-acc-d { fill: rgba(176,255,64,0.12); }
+
+  /* ═══ CARD ═══ */
+  .card {
+    position: absolute;
+    background: var(--panel);
+    border: 1px solid var(--pri-border);
+    display: flex; flex-direction: column;
+    min-width: 200px; max-width: 600px;
+    box-shadow: 0 0 2px var(--pri-glow), 0 0 30px rgba(196,112,255,0.04);
+    z-index: 10;
+  }
+  .card.dragging { z-index: 1000; box-shadow: 0 0 8px var(--pri-glow), 0 0 60px rgba(196,112,255,0.08); opacity: 0.95; }
+  .card.focused { z-index: 100; border-color: rgba(196,112,255,0.4); }
+
+  /* Corner brackets — lime accent */
+  .card::before { content:''; position:absolute; top:-1px; left:-1px; width:10px; height:10px; border-top:2px solid var(--acc); border-left:2px solid var(--acc); filter:drop-shadow(0 0 3px var(--acc-glow)); z-index:2; pointer-events:none; }
+  .card::after { content:''; position:absolute; bottom:-1px; right:-1px; width:10px; height:10px; border-bottom:2px solid var(--acc); border-right:2px solid var(--acc); filter:drop-shadow(0 0 3px var(--acc-glow)); z-index:2; pointer-events:none; }
+  .card .c-tr, .card .c-bl { position:absolute; width:10px; height:10px; pointer-events:none; z-index:2; }
+  .card .c-tr { top:-1px; right:-1px; border-top:2px solid var(--acc); border-right:2px solid var(--acc); filter:drop-shadow(0 0 3px var(--acc-glow)); }
+  .card .c-bl { bottom:-1px; left:-1px; border-bottom:2px solid var(--acc); border-left:2px solid var(--acc); filter:drop-shadow(0 0 3px var(--acc-glow)); }
+
+  .card-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:5px 10px; border-bottom:1px solid rgba(196,112,255,0.08);
+    background:rgba(196,112,255,0.02); cursor:grab; flex-shrink:0; gap:8px;
+  }
+  .card-head:active { cursor: grabbing; }
+  .card-title { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--pri); text-shadow:0 0 6px var(--pri-glow); flex:1; white-space:nowrap; }
+  .card-badge { font-size:9px; letter-spacing:1px; color:var(--text-dim); }
+  .card-btn { width:8px; height:8px; border:1px solid var(--pri-border); cursor:pointer; display:inline-block; margin-left:3px; }
+  .card-btn:hover { background: var(--pri); }
+
+  .card-body { padding:8px 10px; flex:1; overflow-y:auto; min-height:0; font-size:11px; }
+  .card-body::-webkit-scrollbar { width:2px; }
+  .card-body::-webkit-scrollbar-thumb { background:rgba(196,112,255,0.15); }
+
+  .resize-handle { position:absolute; bottom:0; right:0; width:14px; height:14px; cursor:nwse-resize; z-index:3; }
+  .resize-handle::before { content:''; position:absolute; bottom:3px; right:3px; width:6px; height:6px; border-right:1px solid var(--pri-dim); border-bottom:1px solid var(--pri-dim); }
+
+  /* ═══ SHARED ═══ */
+  .row { display:flex; justify-content:space-between; padding:3px 0; font-size:11px; border-bottom:1px solid rgba(196,112,255,0.03); }
+  .row:last-child { border-bottom:none; }
+  .r-l { color:var(--text-dim); font-size:9px; letter-spacing:1px; text-transform:uppercase; }
+  .r-v { color:var(--pri); text-shadow:0 0 4px rgba(196,112,255,0.2); }
+  .r-v.ok { color:var(--acc); text-shadow:0 0 5px var(--acc-glow); }
+  .r-v.warn { color:#ffaa30; text-shadow:0 0 4px rgba(255,170,48,0.4); }
+  .r-v.hot { color:var(--white); text-shadow:0 0 8px var(--white-glow); }
+
+  .abar { font-size:9px; color:var(--text-dim); line-height:1.4; }
+  .abar .fill { color:var(--pri); text-shadow:0 0 2px rgba(196,112,255,0.2); }
+
+  .ch-row { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:11px; border-bottom:1px solid rgba(196,112,255,0.03); }
+  .ch-row:last-child { border-bottom:none; }
+  .dot { width:5px; height:5px; flex-shrink:0; }
+  .dot.on { background:var(--acc); box-shadow:0 0 6px var(--acc-glow); }
+  .dot.off { background:var(--red); box-shadow:0 0 4px rgba(255,68,102,0.3); opacity:.7; }
+  .dot.pulse { background:var(--pri-bright); box-shadow:0 0 6px var(--pri-glow); animation:pulse 2.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .ch-n { flex:1; color:var(--pri); }
+  .ch-i { color:var(--text-dim); font-size:9px; }
+
+  .log-line { font-size:9px; line-height:1.6; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .log-ts { color:var(--pri-dim); }
+  .log-ok { color:var(--pri-mid); }
+  .log-w { color:#ffaa30; text-shadow:0 0 3px rgba(255,170,48,0.4); }
+
+  .act-row { padding:4px 0; border-bottom:1px solid rgba(196,112,255,0.03); font-size:10px; }
+  .act-row:last-child { border-bottom:none; }
+  .act-t { color:var(--text-dim); font-size:8px; letter-spacing:1px; }
+  .act-m { color:var(--pri-dim); margin-top:1px; }
+  .act-m .hl { color:var(--pri); text-shadow:0 0 3px rgba(196,112,255,0.2); }
+
+  /* Chat */
+  .chat-body { display:flex; flex-direction:column; min-height:0; flex:1; }
+  .chat-scroll { flex:1; overflow-y:auto; padding:8px 10px; }
+  .chat-scroll::-webkit-scrollbar { width:2px; }
+  .chat-scroll::-webkit-scrollbar-thumb { background:rgba(196,112,255,0.12); }
+  .chat-hdr { font-size:10px; color:var(--text-dim); padding-bottom:6px; border-bottom:1px solid rgba(196,112,255,0.04); margin-bottom:6px; line-height:1.5; }
+
+  .msg-block { margin-bottom:6px; }
+  .msg-line { font-size:12px; line-height:1.6; }
+
+  /* User prompts in hot white */
+  .p-user { color:var(--white); text-shadow:0 0 8px var(--white-glow); }
+  /* CLU in lime accent */
+  .p-clu { color:var(--acc); text-shadow:0 0 5px var(--acc-glow); }
+  /* Tools in violet */
+  .p-tool { color:var(--pri-bright); text-shadow:0 0 4px var(--pri-glow); }
+
+  .t-user { color:var(--text-bright); text-shadow:0 0 1px rgba(240,238,255,0.1); }
+  .t-clu { color:var(--acc-bright); text-shadow:0 0 2px rgba(176,255,64,0.12); }
+  .t-tool { color:var(--pri-dim); font-size:11px; padding-left:14px; border-left:1px solid rgba(196,112,255,0.15); margin:2px 0 2px 6px; }
+  .chat-sep { border:none; border-top:1px solid rgba(196,112,255,0.04); margin:5px 0; }
+
+  .cursor-blink { display:inline-block; width:7px; height:12px; background:var(--white); box-shadow:0 0 8px var(--white-glow); animation:blink 1s step-end infinite; vertical-align:text-bottom; }
+  @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+
+  .chat-input-area { display:flex; align-items:center; padding:6px 10px; border-top:1px solid rgba(196,112,255,0.1); background:rgba(196,112,255,0.015); flex-shrink:0; }
+  .ci-p { color:var(--white); text-shadow:0 0 6px var(--white-glow); font-size:12px; margin-right:8px; }
+  .ci-in { flex:1; background:transparent; border:none; color:var(--text-bright); font-family:'Share Tech Mono',monospace; font-size:12px; outline:none; caret-color:var(--white); }
+
+  /* ═══ HUD ═══ */
+  .hud-top {
+    position:fixed; top:0; left:0; right:0; height:34px;
+    display:flex; align-items:center; padding:0 14px; gap:14px;
+    background:rgba(6,0,14,0.92); border-bottom:1px solid var(--pri-border);
+    z-index:10000;
+  }
+  .hud-top::after { content:''; position:absolute; bottom:-1px; left:8%; right:8%; height:1px; background:linear-gradient(90deg,transparent,var(--pri-glow),transparent); opacity:.3; }
+  .hud-brand { font-size:11px; letter-spacing:4px; text-transform:uppercase; color:var(--white); text-shadow:0 0 12px var(--white-glow); }
+  .hud-sep { width:1px; height:14px; background:var(--pri-border); }
+  .hud-item { font-size:9px; color:var(--text-dim); display:flex; align-items:center; gap:4px; letter-spacing:1px; text-transform:uppercase; }
+  .hd { width:4px; height:4px; }
+  .hd.ok { background:var(--acc); box-shadow:0 0 4px var(--acc-glow); }
+  .hd.off { background:var(--red); opacity:.7; }
+  .hud-spacer { flex:1; }
+  .hud-model { font-size:9px; letter-spacing:2px; color:var(--acc); text-shadow:0 0 6px var(--acc-glow); border:1px solid var(--acc-dim); padding:1px 8px; }
+  .hud-clock { font-size:10px; letter-spacing:2px; color:var(--white); text-shadow:0 0 6px var(--white-glow); }
+
+  .hud-bottom {
+    position:fixed; bottom:0; left:0; right:0; height:24px;
+    display:flex; align-items:center; padding:0 14px; gap:12px;
+    background:rgba(6,0,14,0.92); border-top:1px solid var(--pri-border);
+    z-index:10000; font-size:8px; letter-spacing:1px; color:var(--text-dim);
+  }
+  .hud-bottom::before { content:''; position:absolute; top:-1px; left:15%; right:15%; height:1px; background:linear-gradient(90deg,transparent,var(--pri-glow),transparent); opacity:.2; }
+
+  /* Minimap */
+  .minimap {
+    position:fixed; bottom:32px; right:8px; width:160px; height:100px;
+    border:1px solid var(--pri-border); background:rgba(6,0,14,0.88);
+    z-index:10001; overflow:hidden;
+  }
+  .minimap::before { content:''; position:absolute; top:-1px; left:-1px; width:8px; height:8px; border-top:1px solid var(--acc); border-left:1px solid var(--acc); }
+  .minimap::after { content:''; position:absolute; bottom:-1px; right:-1px; width:8px; height:8px; border-bottom:1px solid var(--acc); border-right:1px solid var(--acc); }
+  .minimap-label { position:absolute; top:2px; left:4px; font-size:7px; letter-spacing:1px; color:var(--pri-dim); text-transform:uppercase; }
+  .minimap-viewport { position:absolute; border:1px solid rgba(196,112,255,0.5); background:rgba(196,112,255,0.05); }
+  .minimap-card { position:absolute; background:rgba(196,112,255,0.2); }
+</style>
+</head>
+<body>
+
+<div class="crt-scanlines"></div>
+<div class="crt-vignette"></div>
+<div class="crt-bloom"></div>
+<div class="crt-flicker"></div>
+
+<div class="hud-top">
+  <span class="hud-brand">OpenClaw</span><div class="hud-sep"></div>
+  <div class="hud-item"><div class="hd ok"></div> Gateway</div>
+  <div class="hud-item"><div class="hd ok"></div> Ollama</div>
+  <div class="hud-item"><div class="hd ok"></div> 3 Ch</div>
+  <div class="hud-item"><div class="hd off"></div> iMsg</div>
+  <div class="hud-spacer"></div>
+  <div class="hud-model">CLU:LATEST</div><div class="hud-sep"></div>
+  <span class="hud-clock" id="clock">00:00:00</span>
+</div>
+
+<div class="hud-bottom">
+  <span id="coords">x: 0  y: 0</span>
+  <div style="width:1px;height:10px;background:var(--pri-border)"></div>
+  <span id="zoom-display">100%</span>
+  <div style="flex:1"></div>
+  <span>drag to pan · scroll to zoom · drag headers to move</span>
+</div>
+
+<div class="minimap" id="minimap"><span class="minimap-label">Map</span><div class="minimap-viewport" id="minimap-vp"></div></div>
+
+<div class="canvas-viewport" id="viewport">
+<div class="canvas-world" id="world">
+
+<div class="canvas-geo">
+<svg viewBox="0 0 6000 4000">
+  <!-- Concentric hexagons (End of Line Club shape language) -->
+  <polygon class="cg-r" points="3000,1300 3606,1650 3606,2350 3000,2700 2394,2350 2394,1650"/>
+  <polygon class="cg-r" points="3000,1400 3520,1700 3520,2300 3000,2600 2480,2300 2480,1700"/>
+  <polygon class="cg-l" points="3000,1500 3433,1750 3433,2250 3000,2500 2567,2250 2567,1750"/>
+  <!-- Lime accent triangle -->
+  <polygon class="cg-acc-b" points="3000,1100 3780,2350 2220,2350"/>
+  <polygon class="cg-acc" points="3000,1250 3650,2280 2350,2280"/>
+  <!-- Radial lines from center -->
+  <line class="cg-l" x1="3000" y1="1100" x2="3000" y2="2900"/>
+  <line class="cg-l" x1="2200" y1="1540" x2="3800" y2="2460"/>
+  <line class="cg-l" x1="2200" y1="2460" x2="3800" y2="1540"/>
+  <!-- Corner flourishes -->
+  <path class="cg-lb" d="M1600 600 L1800 600 L1830 570"/>
+  <path class="cg-lb" d="M4400 600 L4200 600 L4170 570"/>
+  <path class="cg-lb" d="M1600 3400 L1800 3400 L1830 3430"/>
+  <path class="cg-lb" d="M4400 3400 L4200 3400 L4170 3430"/>
+  <!-- Accent dots -->
+  <circle class="cg-d" cx="1800" cy="600" r="3"/>
+  <circle class="cg-d" cx="4200" cy="600" r="3"/>
+  <circle class="cg-acc-d" cx="3000" cy="1100" r="4"/>
+  <circle class="cg-acc-d" cx="3780" cy="2350" r="3"/>
+  <circle class="cg-acc-d" cx="2220" cy="2350" r="3"/>
+</svg>
+</div>
+
+<!-- CHAT -->
+<div class="card" style="left:1800px;top:800px;width:520px;height:580px;" data-id="chat">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Terminal — CLU</span><span class="card-badge">session:7a3f</span><span class="card-btn"></span><span class="card-btn"></span></div>
+  <div class="chat-body">
+    <div class="chat-scroll">
+      <div class="chat-hdr">--- OpenClaw Terminal v2026.1.30 ---<br>--- gateway :18789 · clu:latest ---</div>
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-user">user@grid ~$</span> <span class="t-user">What cron jobs are scheduled?</span></div>
+      </div>
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-tool">[tool]</span> <span style="color:var(--pri-bright);font-size:10px">cron.status</span></div>
+        <div class="t-tool">daily-summary: ok (next: 18h)<br>health-check: ok (next: 52m)</div>
+      </div>
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-clu">CLU ›</span></div>
+        <div class="msg-line"><span class="t-clu">Two automated processes are active on the Grid.</span></div>
+        <div class="msg-line"><span class="t-clu">The daily-summary compiles channel metrics every</span></div>
+        <div class="msg-line"><span class="t-clu">24 cycles. The health-check validates gateway</span></div>
+        <div class="msg-line"><span class="t-clu">integrity hourly. Both completed their last runs</span></div>
+        <div class="msg-line"><span class="t-clu">without anomaly. Shall I add a new schedule?</span></div>
+      </div>
+      <hr class="chat-sep">
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-user">user@grid ~$</span> <span class="t-user">Show Discord activity for the last hour</span></div>
+      </div>
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-tool">[tool]</span> <span style="color:var(--pri-bright);font-size:10px">channels.config.get("discord")</span></div>
+        <div class="t-tool">guilds: 3 | messages_1h: 47 | active_users: 12<br>last_msg: 2m ago in #general by jamie</div>
+      </div>
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-clu">CLU ›</span></div>
+        <div class="msg-line"><span class="t-clu">Discord reports 47 transmissions across 3 guilds</span></div>
+        <div class="msg-line"><span class="t-clu">in the last hour. 12 unique users active. Most</span></div>
+        <div class="msg-line"><span class="t-clu">recent message: 2 minutes ago in #general.</span></div>
+        <div class="msg-line"><span class="t-clu">Traffic patterns are within normal parameters.</span></div>
+        <div class="msg-line"><span class="t-clu">Everything is proceeding as I have designed.</span></div>
+      </div>
+      <hr class="chat-sep">
+      <div class="msg-block">
+        <div class="msg-line"><span class="p-user">user@grid ~$</span> <span class="cursor-blink"></span></div>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <span class="ci-p">user@grid ~$</span>
+      <input type="text" class="ci-in" autofocus>
+    </div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- SYSTEM -->
+<div class="card" style="left:1400px;top:800px;width:280px;height:400px;" data-id="system">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">System</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="row"><span class="r-l">Gateway</span><span class="r-v ok">ONLINE</span></div>
+    <div class="row"><span class="r-l">Uptime</span><span class="r-v">4h 23m</span></div>
+    <div class="row"><span class="r-l">Model</span><span class="r-v hot">clu:latest</span></div>
+    <div class="row"><span class="r-l">Quant</span><span class="r-v">Q8_0 · 8.5GB</span></div>
+    <div class="row"><span class="r-l">Tick</span><span class="r-v">60s</span></div>
+    <div class="row"><span class="r-l">Sessions</span><span class="r-v">3</span></div>
+    <div class="row"><span class="r-l">API Calls</span><span class="r-v">847</span></div>
+    <div class="row"><span class="r-l">Avg Lat</span><span class="r-v">1.2s</span></div>
+    <div class="row"><span class="r-l">Memory</span><span class="r-v warn">1.2 GB</span></div>
+    <div style="margin-top:8px">
+      <div class="abar">CPU  <span class="fill">████████</span>░░░░░░░░ 48%</div>
+      <div class="abar">MEM  <span class="fill">██████████████</span>░░ 82%</div>
+      <div class="abar">GPU  <span class="fill">███████████</span>░░░░░ 64%</div>
+    </div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- CHANNELS -->
+<div class="card" style="left:2440px;top:800px;width:260px;height:200px;" data-id="channels">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Channels</span><span class="card-badge">3/4</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">Discord</span><span class="ch-i">3 guilds · 2m</span></div>
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">Telegram</span><span class="ch-i">12 chats · 5m</span></div>
+    <div class="ch-row"><div class="dot off"></div><span class="ch-n">iMessage</span><span class="ch-i">auth pending</span></div>
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">Nostr</span><span class="ch-i">2 relays</span></div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- SESSIONS -->
+<div class="card" style="left:2440px;top:1060px;width:260px;height:170px;" data-id="sessions">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Sessions</span><span class="card-badge">3</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="ch-row"><div class="dot pulse"></div><span class="ch-n" style="width:34px;flex:none;font-size:10px;color:var(--pri-bright)">7A3F</span><span class="ch-n">Control UI</span><span class="ch-i">clu:latest</span></div>
+    <div class="ch-row"><div class="dot pulse" style="animation-delay:.5s"></div><span class="ch-n" style="width:34px;flex:none;font-size:10px;color:var(--pri-bright)">B2C1</span><span class="ch-n">Discord</span><span class="ch-i">clu:latest</span></div>
+    <div class="ch-row"><div class="dot pulse" style="animation-delay:1s"></div><span class="ch-n" style="width:34px;flex:none;font-size:10px;color:var(--pri-bright)">E9D4</span><span class="ch-n">Telegram</span><span class="ch-i">clu:latest</span></div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- ACTIVITY -->
+<div class="card" style="left:1400px;top:1260px;width:280px;height:260px;" data-id="activity">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Activity</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="act-row"><div class="act-t">2M AGO</div><div class="act-m"><span class="hl">discord</span> msg #general</div></div>
+    <div class="act-row"><div class="act-t">5M AGO</div><div class="act-m"><span class="hl">cron</span> daily-summary ok</div></div>
+    <div class="act-row"><div class="act-t">12M AGO</div><div class="act-m"><span class="hl">telegram</span> 2 msgs sent</div></div>
+    <div class="act-row"><div class="act-t">18M AGO</div><div class="act-m"><span class="hl">node</span> mac-mini heartbeat</div></div>
+    <div class="act-row"><div class="act-t">30M AGO</div><div class="act-m"><span class="hl">skill</span> web_search ×3</div></div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- LOG -->
+<div class="card" style="left:2440px;top:1290px;width:340px;height:230px;" data-id="log">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Log</span><span class="card-badge">live</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="log-line"><span class="log-ts">08:42:31</span> <span class="log-ok">INF</span> chat.stream.final s=7A3F t=142</div>
+    <div class="log-line"><span class="log-ts">08:42:30</span> <span class="log-ok">INF</span> cron.run daily-summary</div>
+    <div class="log-line"><span class="log-ts">08:41:55</span> <span class="log-ok">INF</span> chat.send s=7A3F</div>
+    <div class="log-line"><span class="log-ts">08:40:12</span> <span class="log-ok">INF</span> discord.msg general</div>
+    <div class="log-line"><span class="log-ts">08:38:44</span> <span class="log-w">WRN</span> ollama.slow 3.2s</div>
+    <div class="log-line"><span class="log-ts">08:37:01</span> <span class="log-ok">INF</span> telegram.send 294</div>
+    <div class="log-line"><span class="log-ts">08:35:18</span> <span class="log-ok">INF</span> presence.hb mac-mini</div>
+    <div class="log-line"><span class="log-ts">08:33:00</span> <span class="log-ok">INF</span> tick ok s=3</div>
+    <div class="log-line"><span class="log-ts">08:28:42</span> <span class="log-w">WRN</span> imessage.bridge lost</div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- SKILLS -->
+<div class="card" style="left:2810px;top:800px;width:220px;height:190px;" data-id="skills">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Skills</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">web_search</span><span class="ch-i">active</span></div>
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">code_exec</span><span class="ch-i">active</span></div>
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">file_manager</span><span class="ch-i">active</span></div>
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">image_gen</span><span class="ch-i">active</span></div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+<!-- CRON -->
+<div class="card" style="left:2810px;top:1050px;width:220px;height:140px;" data-id="cron">
+  <div class="c-tr"></div><div class="c-bl"></div>
+  <div class="card-head"><span class="card-title">Cron</span><span class="card-btn"></span></div>
+  <div class="card-body">
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">daily-summary</span><span class="ch-i">18h</span></div>
+    <div class="ch-row"><div class="dot on"></div><span class="ch-n">health-check</span><span class="ch-i">52m</span></div>
+  </div>
+  <div class="resize-handle"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+const viewport=document.getElementById('viewport'),world=document.getElementById('world'),coordsEl=document.getElementById('coords'),zoomEl=document.getElementById('zoom-display');
+let panX=-1600,panY=-600,scale=1,isPanning=false,panStartX,panStartY;
+function applyTransform(){world.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;coordsEl.textContent=`x:${Math.round(-panX)} y:${Math.round(-panY)}`;zoomEl.textContent=`${Math.round(scale*100)}%`;updateMinimap();}
+viewport.addEventListener('pointerdown',e=>{if(e.target.closest('.card'))return;isPanning=true;panStartX=e.clientX-panX;panStartY=e.clientY-panY;viewport.setPointerCapture(e.pointerId);});
+viewport.addEventListener('pointermove',e=>{if(!isPanning)return;panX=e.clientX-panStartX;panY=e.clientY-panStartY;applyTransform();});
+viewport.addEventListener('pointerup',()=>{isPanning=false;});
+viewport.addEventListener('wheel',e=>{e.preventDefault();const r=viewport.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,wx=(mx-panX)/scale,wy=(my-panY)/scale;scale=Math.min(3,Math.max(.2,scale*(e.deltaY>0?.92:1.08)));panX=mx-wx*scale;panY=my-wy*scale;applyTransform();},{passive:false});
+let dragCard=null,dragOffX=0,dragOffY=0;
+document.querySelectorAll('.card-head').forEach(h=>{h.addEventListener('pointerdown',e=>{e.stopPropagation();const c=h.closest('.card');c.classList.add('dragging','focused');document.querySelectorAll('.card').forEach(x=>{if(x!==c)x.classList.remove('focused')});dragCard=c;const cr=c.getBoundingClientRect();dragOffX=e.clientX-cr.left;dragOffY=e.clientY-cr.top;h.setPointerCapture(e.pointerId);});h.addEventListener('pointermove',e=>{if(!dragCard)return;const wr=world.getBoundingClientRect();dragCard.style.left=((e.clientX-wr.left-dragOffX)/scale)+'px';dragCard.style.top=((e.clientY-wr.top-dragOffY)/scale)+'px';updateMinimap();});h.addEventListener('pointerup',()=>{if(dragCard)dragCard.classList.remove('dragging');dragCard=null;});});
+document.querySelectorAll('.resize-handle').forEach(h=>{let rc=null,sw,sh,smx,smy;h.addEventListener('pointerdown',e=>{e.stopPropagation();rc=h.closest('.card');sw=rc.offsetWidth;sh=rc.offsetHeight;smx=e.clientX;smy=e.clientY;h.setPointerCapture(e.pointerId);});h.addEventListener('pointermove',e=>{if(!rc)return;rc.style.width=Math.max(180,sw+(e.clientX-smx)/scale)+'px';rc.style.height=Math.max(100,sh+(e.clientY-smy)/scale)+'px';updateMinimap();});h.addEventListener('pointerup',()=>{rc=null;});});
+const minimap=document.getElementById('minimap'),minimapVp=document.getElementById('minimap-vp'),WW=6000,WH=4000,MW=160,MH=100;
+function updateMinimap(){const sx=MW/WW,sy=MH/WH;minimapVp.style.left=(-panX/scale*sx)+'px';minimapVp.style.top=(-panY/scale*sy)+'px';minimapVp.style.width=(window.innerWidth/scale*sx)+'px';minimapVp.style.height=((window.innerHeight-58)/scale*sy)+'px';minimap.querySelectorAll('.minimap-card').forEach(c=>c.remove());document.querySelectorAll('.card').forEach(c=>{const d=document.createElement('div');d.className='minimap-card';d.style.left=(parseFloat(c.style.left)*sx)+'px';d.style.top=(parseFloat(c.style.top)*sy)+'px';d.style.width=(c.offsetWidth*sx)+'px';d.style.height=(c.offsetHeight*sy)+'px';minimap.appendChild(d);});}
+function tick(){document.getElementById('clock').textContent=new Date().toTimeString().split(' ')[0];}setInterval(tick,1000);tick();
+applyTransform();
+document.querySelector('.chat-scroll').scrollTop=99999;
+</script>
+</body>
+</html>

@@ -30,6 +30,7 @@ type ModelSelectionState = {
   model: string;
   allowedModelKeys: Set<string>;
   allowedModelCatalog: ModelCatalog;
+  allowAny: boolean;
   resetModelOverride: boolean;
   resolveDefaultThinkingLevel: () => Promise<ThinkLevel>;
   needsModelCatalog: boolean;
@@ -301,6 +302,7 @@ export async function createModelSelectionState(params: {
   let allowedModelCatalog: ModelCatalog = [];
   let modelCatalog: ModelCatalog | null = null;
   let resetModelOverride = false;
+  let allowAny = true;
 
   if (needsModelCatalog) {
     modelCatalog = await loadModelCatalog({ config: cfg });
@@ -312,6 +314,7 @@ export async function createModelSelectionState(params: {
     });
     allowedModelCatalog = allowed.allowedCatalog;
     allowedModelKeys = allowed.allowedKeys;
+    allowAny = allowed.allowAny;
   }
 
   if (sessionEntry && sessionStore && sessionKey && hasStoredOverride) {
@@ -395,6 +398,7 @@ export async function createModelSelectionState(params: {
     model,
     allowedModelKeys,
     allowedModelCatalog,
+    allowAny,
     resetModelOverride,
     resolveDefaultThinkingLevel,
     needsModelCatalog,
@@ -407,6 +411,7 @@ export function resolveModelDirectiveSelection(params: {
   defaultModel: string;
   aliasIndex: ModelAliasIndex;
   allowedModelKeys: Set<string>;
+  allowAny?: boolean;
 }): { selection?: ModelDirectiveSelection; error?: string } {
   const { raw, defaultProvider, defaultModel, aliasIndex, allowedModelKeys } = params;
 
@@ -540,7 +545,7 @@ export function resolveModelDirectiveSelection(params: {
   }
 
   const resolvedKey = modelKey(resolved.ref.provider, resolved.ref.model);
-  if (allowedModelKeys.size === 0 || allowedModelKeys.has(resolvedKey)) {
+  if (params.allowAny || allowedModelKeys.size === 0 || allowedModelKeys.has(resolvedKey)) {
     return {
       selection: {
         provider: resolved.ref.provider,

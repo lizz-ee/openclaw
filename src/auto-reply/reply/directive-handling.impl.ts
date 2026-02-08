@@ -76,6 +76,7 @@ export async function handleDirectiveOnly(params: {
   allowedModelCatalog: Awaited<
     ReturnType<typeof import("../../agents/model-catalog.js").loadModelCatalog>
   >;
+  allowAny?: boolean;
   resetModelOverride: boolean;
   provider: string;
   model: string;
@@ -146,6 +147,7 @@ export async function handleDirectiveOnly(params: {
     aliasIndex,
     allowedModelKeys,
     allowedModelCatalog,
+    allowAny: params.allowAny,
     provider,
   });
   if (modelResolution.errorText) {

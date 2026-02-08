@@ -18,22 +18,17 @@ import {
   type Tab,
 } from "./navigation";
 import { saveSettings, type UiSettings } from "./storage";
-import { resolveTheme, type ResolvedTheme, type ThemeMode } from "./theme";
+import { type ThemeName } from "./theme";
 import { startThemeTransition, type ThemeTransitionContext } from "./theme-transition";
-import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
-import {
-  startLogsPolling,
-  stopLogsPolling,
-  startDebugPolling,
-  stopDebugPolling,
-} from "./app-polling";
+import { scheduleChatScroll } from "./app-scroll";
 import { refreshChat } from "./app-chat";
 import type { OpenClawApp } from "./app";
+import type { CardId, CardState } from "./canvas/canvas-types";
 
 type SettingsHost = {
   settings: UiSettings;
-  theme: ThemeMode;
-  themeResolved: ResolvedTheme;
+  theme: ThemeName;
+  themeResolved: string;
   applySessionKey: string;
   sessionKey: string;
   tab: Tab;
@@ -43,9 +38,8 @@ type SettingsHost = {
   eventLog: unknown[];
   eventLogBuffer: unknown[];
   basePath: string;
-  themeMedia: MediaQueryList | null;
-  themeMediaHandler: ((event: MediaQueryListEvent) => void) | null;
   pendingGatewayUrl?: string | null;
+  canvasCards?: Record<CardId, CardState>;
 };
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
@@ -57,7 +51,7 @@ export function applySettings(host: SettingsHost, next: UiSettings) {
   saveSettings(normalized);
   if (next.theme !== host.theme) {
     host.theme = next.theme;
-    applyResolvedTheme(host, resolveTheme(next.theme));
+    applyTheme(host, next.theme);
   }
   host.applySessionKey = host.settings.lastActiveSessionKey;
 }
@@ -90,7 +84,7 @@ export function applySettingsFromUrl(host: SettingsHost) {
   if (passwordRaw != null) {
     const password = passwordRaw.trim();
     if (password) {
-      (host as { password: string }).password = password;
+      (host as unknown as { password: string }).password = password;
     }
     params.delete("password");
     shouldCleanUrl = true;
@@ -123,65 +117,57 @@ export function applySettingsFromUrl(host: SettingsHost) {
   window.history.replaceState({}, "", url.toString());
 }
 
-export function setTab(host: SettingsHost, next: Tab) {
-  if (host.tab !== next) host.tab = next;
-  if (next === "chat") host.chatHasAutoScrolled = false;
-  if (next === "logs") startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
-  else stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
-  if (next === "debug")
-    startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
-  else stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
-  void refreshActiveTab(host);
-  syncUrlWithTab(host, next, false);
-}
-
-export function setTheme(host: SettingsHost, next: ThemeMode, context?: ThemeTransitionContext) {
-  const applyTheme = () => {
+export function setTheme(host: SettingsHost, next: ThemeName, context?: ThemeTransitionContext) {
+  const apply = () => {
     host.theme = next;
     applySettings(host, { ...host.settings, theme: next });
-    applyResolvedTheme(host, resolveTheme(next));
+    applyTheme(host, next);
   };
   startThemeTransition({
     nextTheme: next,
-    applyTheme,
+    applyTheme: apply,
     context,
     currentTheme: host.theme,
   });
 }
 
 export async function refreshActiveTab(host: SettingsHost) {
-  if (host.tab === "overview") await loadOverview(host);
-  if (host.tab === "channels") await loadChannelsTab(host);
-  if (host.tab === "instances") await loadPresence(host as unknown as OpenClawApp);
-  if (host.tab === "sessions") await loadSessions(host as unknown as OpenClawApp);
-  if (host.tab === "cron") await loadCron(host);
-  if (host.tab === "skills") await loadSkills(host as unknown as OpenClawApp);
-  if (host.tab === "nodes") {
-    await loadNodes(host as unknown as OpenClawApp);
-    await loadDevices(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
-    await loadExecApprovals(host as unknown as OpenClawApp);
+  if (!host.canvasCards) return;
+  const open = Object.entries(host.canvasCards)
+    .filter(([, c]) => c?.open)
+    .map(([id]) => id as CardId);
+  if (open.length === 0) return;
+  const loads: Promise<unknown>[] = [];
+  const app = host as unknown as OpenClawApp;
+  for (const id of open) {
+    if (id === "chat") {
+      loads.push(
+        refreshChat(app as unknown as Parameters<typeof refreshChat>[0]).then(() => {
+          scheduleChatScroll(
+            app as unknown as Parameters<typeof scheduleChatScroll>[0],
+            !host.chatHasAutoScrolled,
+          );
+        }),
+      );
+    }
+    if (id === "system" || id === "debug") {
+      loads.push(loadDebug(app));
+      host.eventLog = host.eventLogBuffer;
+    }
+    if (id === "channels") loads.push(loadChannels(app, false));
+    if (id === "sessions") loads.push(loadSessions(app));
+    if (id === "skills") loads.push(loadSkills(app));
+    if (id === "cron") loads.push(loadCronStatus(app), loadCronJobs(app));
+    if (id === "config") loads.push(loadConfigSchema(app), loadConfig(app));
+    if (id === "nodes") {
+      loads.push(loadPresence(app), loadNodes(app), loadDevices(app), loadExecApprovals(app));
+    }
+    if (id === "log") {
+      host.logsAtBottom = true;
+      loads.push(loadLogs(app, { reset: true }));
+    }
   }
-  if (host.tab === "chat") {
-    await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);
-    scheduleChatScroll(
-      host as unknown as Parameters<typeof scheduleChatScroll>[0],
-      !host.chatHasAutoScrolled,
-    );
-  }
-  if (host.tab === "config") {
-    await loadConfigSchema(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
-  }
-  if (host.tab === "debug") {
-    await loadDebug(host as unknown as OpenClawApp);
-    host.eventLog = host.eventLogBuffer;
-  }
-  if (host.tab === "logs") {
-    host.logsAtBottom = true;
-    await loadLogs(host as unknown as OpenClawApp, { reset: true });
-    scheduleLogsScroll(host as unknown as Parameters<typeof scheduleLogsScroll>[0], true);
-  }
+  await Promise.all(loads);
 }
 
 export function inferBasePath() {
@@ -194,47 +180,24 @@ export function inferBasePath() {
 }
 
 export function syncThemeWithSettings(host: SettingsHost) {
-  host.theme = host.settings.theme ?? "system";
-  applyResolvedTheme(host, resolveTheme(host.theme));
+  const theme = host.settings.theme ?? "grid";
+  host.theme = theme as ThemeName;
+  applyTheme(host, host.theme);
 }
 
-export function applyResolvedTheme(host: SettingsHost, resolved: ResolvedTheme) {
-  host.themeResolved = resolved;
+export function applyTheme(host: SettingsHost, theme: ThemeName) {
+  host.themeResolved = theme;
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  root.dataset.theme = resolved;
-  root.style.colorScheme = resolved;
-}
+  root.dataset.theme = theme;
+  root.style.colorScheme = "dark";
 
-export function attachThemeListener(host: SettingsHost) {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-  host.themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
-  host.themeMediaHandler = (event) => {
-    if (host.theme !== "system") return;
-    applyResolvedTheme(host, event.matches ? "dark" : "light");
-  };
-  if (typeof host.themeMedia.addEventListener === "function") {
-    host.themeMedia.addEventListener("change", host.themeMediaHandler);
-    return;
+  // Apply CRT toggle
+  if (host.settings.crtEffects === false) {
+    root.classList.add("crt-off");
+  } else {
+    root.classList.remove("crt-off");
   }
-  const legacy = host.themeMedia as MediaQueryList & {
-    addListener: (cb: (event: MediaQueryListEvent) => void) => void;
-  };
-  legacy.addListener(host.themeMediaHandler);
-}
-
-export function detachThemeListener(host: SettingsHost) {
-  if (!host.themeMedia || !host.themeMediaHandler) return;
-  if (typeof host.themeMedia.removeEventListener === "function") {
-    host.themeMedia.removeEventListener("change", host.themeMediaHandler);
-    return;
-  }
-  const legacy = host.themeMedia as MediaQueryList & {
-    removeListener: (cb: (event: MediaQueryListEvent) => void) => void;
-  };
-  legacy.removeListener(host.themeMediaHandler);
-  host.themeMedia = null;
-  host.themeMediaHandler = null;
 }
 
 export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
@@ -266,11 +229,6 @@ export function onPopState(host: SettingsHost) {
 export function setTabFromRoute(host: SettingsHost, next: Tab) {
   if (host.tab !== next) host.tab = next;
   if (next === "chat") host.chatHasAutoScrolled = false;
-  if (next === "logs") startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
-  else stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
-  if (next === "debug")
-    startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
-  else stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   if (host.connected) void refreshActiveTab(host);
 }
 
@@ -303,24 +261,6 @@ export function syncUrlWithSessionKey(host: SettingsHost, sessionKey: string, re
   url.searchParams.set("session", sessionKey);
   if (replace) window.history.replaceState({}, "", url.toString());
   else window.history.pushState({}, "", url.toString());
-}
-
-export async function loadOverview(host: SettingsHost) {
-  await Promise.all([
-    loadChannels(host as unknown as OpenClawApp, false),
-    loadPresence(host as unknown as OpenClawApp),
-    loadSessions(host as unknown as OpenClawApp),
-    loadCronStatus(host as unknown as OpenClawApp),
-    loadDebug(host as unknown as OpenClawApp),
-  ]);
-}
-
-export async function loadChannelsTab(host: SettingsHost) {
-  await Promise.all([
-    loadChannels(host as unknown as OpenClawApp, true),
-    loadConfigSchema(host as unknown as OpenClawApp),
-    loadConfig(host as unknown as OpenClawApp),
-  ]);
 }
 
 export async function loadCron(host: SettingsHost) {

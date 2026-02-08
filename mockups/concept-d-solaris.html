@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Concept D: SolarOS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --cyan: #00e8d0;
+    --cyan-bright: #40fff0;
+    --cyan-dim: #006e63;
+    --cyan-ghost: rgba(0, 232, 208, 0.04);
+    --cyan-border: rgba(0, 232, 208, 0.25);
+    --cyan-glow: rgba(0, 232, 208, 0.6);
+    --orange: #ff9500;
+    --orange-dim: rgba(255, 149, 0, 0.15);
+    --orange-glow: rgba(255, 149, 0, 0.5);
+    --green: #00ff88;
+    --red: #ff3355;
+    --bg: #000000;
+    --text: #00e8d0;
+    --text-dim: #005e54;
+    --text-bright: #b0fff4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    height: 100vh;
+    overflow: hidden;
+    cursor: default;
+  }
+
+  /* ══════════════════════════════════════════
+     CRT SCREEN EFFECTS
+     ══════════════════════════════════════════ */
+
+  /* Scanlines */
+  .crt-scanlines {
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.15) 1px,
+      rgba(0, 0, 0, 0.15) 2px
+    );
+  }
+
+  /* Screen edge vignette + slight curvature illusion */
+  .crt-vignette {
+    position: fixed; inset: 0; z-index: 9998;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse at center,
+      transparent 55%,
+      rgba(0, 0, 0, 0.5) 80%,
+      rgba(0, 0, 0, 0.85) 100%
+    );
+  }
+
+  /* Phosphor flicker (very subtle) */
+  .crt-flicker {
+    position: fixed; inset: 0; z-index: 9997;
+    pointer-events: none;
+    animation: flicker 0.08s infinite alternate;
+    opacity: 0;
+  }
+  @keyframes flicker {
+    from { opacity: 0; background: rgba(0, 232, 208, 0.005); }
+    to { opacity: 1; background: transparent; }
+  }
+
+  /* ══════════════════════════════════════════
+     GRID BACKGROUND (the Grid floor)
+     ══════════════════════════════════════════ */
+  .grid-floor {
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      linear-gradient(rgba(0,232,208,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,232,208,0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* gmunk-style geometric decoration lines */
+  .geo-deco {
+    position: fixed; z-index: 0; pointer-events: none;
+  }
+  .geo-deco svg { overflow: visible; }
+  .geo-deco .line { stroke: rgba(0,232,208,0.06); stroke-width: 0.5; fill: none; }
+  .geo-deco .line-bright { stroke: rgba(0,232,208,0.12); stroke-width: 0.5; fill: none; }
+  .geo-deco .dot { fill: rgba(0,232,208,0.15); }
+  .geo-deco .ring { stroke: rgba(0,232,208,0.08); stroke-width: 0.5; fill: none; }
+
+  /* ══════════════════════════════════════════
+     WINDOW SYSTEM (SolarOS-inspired)
+     ══════════════════════════════════════════ */
+  .shell {
+    position: relative; z-index: 1;
+    width: 100%; height: 100vh;
+  }
+
+  .window {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.88);
+    border: 1px solid var(--cyan-border);
+    display: flex;
+    flex-direction: column;
+    box-shadow:
+      0 0 1px var(--cyan-glow),
+      0 0 20px rgba(0, 232, 208, 0.05),
+      inset 0 0 30px rgba(0, 232, 208, 0.02);
+  }
+
+  /* Corner brackets on windows */
+  .window::before,
+  .window::after {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    pointer-events: none;
+  }
+  .window::before {
+    top: -1px; left: -1px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+  }
+  .window::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+  }
+
+  /* Additional corner brackets (via child elements) */
+  .window .corner-tr,
+  .window .corner-bl {
+    position: absolute;
+    width: 12px; height: 12px;
+    pointer-events: none;
+  }
+  .window .corner-tr {
+    top: -1px; right: -1px;
+    border-top: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+  }
+  .window .corner-bl {
+    bottom: -1px; left: -1px;
+    border-bottom: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+  }
+
+  /* Window title bar */
+  .win-title {
+    display: flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-bottom: 1px solid rgba(0, 232, 208, 0.12);
+    background: rgba(0, 232, 208, 0.03);
+    gap: 8px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+  .win-title-text {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan-glow);
+    flex: 1;
+  }
+  .win-title-btn {
+    width: 8px; height: 8px;
+    border: 1px solid var(--cyan-border);
+    cursor: pointer;
+  }
+  .win-title-btn:hover { background: var(--cyan); }
+  .win-title-btn.close { border-color: var(--red); }
+  .win-title-btn.close:hover { background: var(--red); }
+
+  .win-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 10px;
+    min-height: 0;
+  }
+  .win-body::-webkit-scrollbar { width: 3px; }
+  .win-body::-webkit-scrollbar-track { background: transparent; }
+  .win-body::-webkit-scrollbar-thumb { background: var(--cyan-border); }
+
+  /* ══════════════════════════════════════════
+     CHAT TERMINAL (main window)
+     ══════════════════════════════════════════ */
+  .win-chat {
+    top: 30px; left: 300px;
+    width: calc(100% - 640px);
+    height: calc(100% - 60px);
+    z-index: 10;
+  }
+
+  .chat-line {
+    margin-bottom: 10px;
+    line-height: 1.6;
+    font-size: 12px;
+  }
+  .chat-line .prompt {
+    display: inline;
+  }
+  .chat-line .prompt.user {
+    color: var(--cyan-bright);
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+  .chat-line .prompt.clu {
+    color: var(--orange);
+    text-shadow: 0 0 6px var(--orange-glow);
+  }
+  .chat-line .prompt.sys {
+    color: var(--text-dim);
+  }
+  .chat-line .prompt.tool {
+    color: var(--green);
+    text-shadow: 0 0 4px rgba(0,255,136,0.3);
+  }
+
+  .chat-text {
+    color: var(--text-bright);
+    text-shadow: 0 0 2px rgba(0,232,208,0.15);
+  }
+  .chat-text.clu-voice {
+    color: #ffcc80;
+    text-shadow: 0 0 3px rgba(255,149,0,0.2);
+  }
+  .chat-text.dim {
+    color: var(--text-dim);
+  }
+  .chat-text.tool-output {
+    color: var(--cyan-dim);
+    font-size: 11px;
+  }
+
+  .chat-separator {
+    border: none;
+    border-top: 1px solid rgba(0,232,208,0.06);
+    margin: 8px 0;
+  }
+
+  /* Blinking cursor */
+  .cursor-block {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--cyan);
+    animation: blink-cursor 1s step-end infinite;
+    vertical-align: text-bottom;
+    box-shadow: 0 0 6px var(--cyan-glow);
+  }
+  @keyframes blink-cursor {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Chat input */
+  .chat-input-line {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-top: 1px solid rgba(0,232,208,0.1);
+    background: rgba(0,232,208,0.01);
+    gap: 0;
+  }
+  .input-prompt-char {
+    color: var(--cyan-bright);
+    text-shadow: 0 0 6px var(--cyan-glow);
+    font-size: 12px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .chat-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-bright);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    caret-color: var(--cyan);
+    text-shadow: 0 0 2px rgba(0,232,208,0.15);
+  }
+  .chat-input::placeholder { color: var(--text-dim); }
+
+  /* ══════════════════════════════════════════
+     STATUS WINDOW (left side)
+     ══════════════════════════════════════════ */
+  .win-status {
+    top: 30px; left: 12px;
+    width: 276px;
+    height: 340px;
+    z-index: 8;
+  }
+
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+  }
+  .status-row:last-child { border-bottom: none; }
+  .status-label { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .status-val { color: var(--cyan); text-shadow: 0 0 4px rgba(0,232,208,0.2); }
+  .status-val.ok { color: var(--green); text-shadow: 0 0 4px rgba(0,255,136,0.3); }
+  .status-val.warn { color: var(--orange); text-shadow: 0 0 4px var(--orange-glow); }
+  .status-val.err { color: var(--red); }
+
+  .status-section-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cyan-dim);
+    border-bottom: 1px solid rgba(0,232,208,0.08);
+    padding: 6px 0 3px;
+    margin-top: 6px;
+  }
+
+  /* Ascii bar chart */
+  .ascii-bar {
+    font-size: 10px;
+    color: var(--cyan-dim);
+    line-height: 1.3;
+    margin-top: 4px;
+  }
+  .ascii-bar .filled { color: var(--cyan); text-shadow: 0 0 3px rgba(0,232,208,0.3); }
+
+  /* ══════════════════════════════════════════
+     CHANNELS WINDOW (left, below status)
+     ══════════════════════════════════════════ */
+  .win-channels {
+    top: 384px; left: 12px;
+    width: 276px;
+    bottom: 42px;
+    z-index: 7;
+  }
+
+  .channel-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+  }
+  .ch-indicator {
+    width: 6px; height: 6px;
+    flex-shrink: 0;
+  }
+  .ch-indicator.on {
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(0,255,136,0.5);
+  }
+  .ch-indicator.off {
+    background: var(--red);
+    box-shadow: 0 0 4px rgba(255,51,85,0.3);
+    opacity: 0.6;
+  }
+  .ch-name { flex: 1; color: var(--cyan); }
+  .ch-detail { color: var(--text-dim); font-size: 10px; }
+
+  /* ══════════════════════════════════════════
+     SESSIONS WINDOW (right side)
+     ══════════════════════════════════════════ */
+  .win-sessions {
+    top: 30px; right: 12px;
+    width: 318px;
+    height: 220px;
+    z-index: 8;
+  }
+
+  .session-entry {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+  }
+  .sess-pulse {
+    width: 6px; height: 6px;
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan-glow);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--cyan-glow); }
+    50% { opacity: 0.4; box-shadow: 0 0 4px var(--cyan-glow); }
+  }
+  .sess-id { color: var(--cyan-bright); letter-spacing: 1px; width: 38px; font-size: 10px; text-shadow: 0 0 4px var(--cyan-glow); }
+  .sess-source { flex: 1; color: var(--cyan); }
+  .sess-model { color: var(--text-dim); font-size: 10px; }
+
+  /* ══════════════════════════════════════════
+     LOGS WINDOW (right side, below sessions)
+     ══════════════════════════════════════════ */
+  .win-logs {
+    top: 264px; right: 12px;
+    width: 318px;
+    bottom: 42px;
+    z-index: 7;
+  }
+
+  .log-entry {
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .log-entry .ts { color: var(--cyan-dim); }
+  .log-entry .lvl-ok { color: var(--cyan); }
+  .log-entry .lvl-warn { color: var(--orange); text-shadow: 0 0 3px var(--orange-glow); }
+  .log-entry .lvl-err { color: var(--red); }
+  .log-entry .msg { color: var(--text-dim); }
+
+  /* ══════════════════════════════════════════
+     BOTTOM STATUS BAR
+     ══════════════════════════════════════════ */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 16px;
+    border-top: 1px solid rgba(0,232,208,0.12);
+    background: rgba(0, 0, 0, 0.95);
+    font-size: 10px;
+    z-index: 100;
+  }
+  .bb-brand {
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan-glow);
+    font-size: 10px;
+  }
+  .bb-sep {
+    width: 1px; height: 14px;
+    background: rgba(0,232,208,0.15);
+  }
+  .bb-item {
+    color: var(--text-dim);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .bb-dot {
+    width: 4px; height: 4px;
+  }
+  .bb-dot.ok { background: var(--green); box-shadow: 0 0 4px rgba(0,255,136,0.5); }
+  .bb-dot.off { background: var(--red); opacity: 0.5; }
+  .bb-spacer { flex: 1; }
+  .bb-clock {
+    color: var(--cyan);
+    letter-spacing: 2px;
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+
+  /* ══════════════════════════════════════════
+     GEOMETRIC DECORATIONS (gmunk-style)
+     ══════════════════════════════════════════ */
+
+  /* Hexagonal frame element */
+  .hex-frame {
+    position: fixed;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* Rotating outer ring decoration */
+  .ring-deco {
+    position: fixed;
+    z-index: 0;
+    pointer-events: none;
+    animation: slow-rotate 120s linear infinite;
+  }
+  @keyframes slow-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Angular bracket decorations at screen edges */
+  .edge-bracket {
+    position: fixed;
+    z-index: 1;
+    pointer-events: none;
+    color: rgba(0,232,208,0.08);
+    font-size: 24px;
+    line-height: 1;
+  }
+  .edge-bracket.tl { top: 6px; left: 6px; }
+  .edge-bracket.tr { top: 6px; right: 6px; }
+  .edge-bracket.bl { bottom: 30px; left: 6px; }
+  .edge-bracket.br { bottom: 30px; right: 6px; }
+
+  /* Thin line connectors between windows */
+  .connector-line {
+    position: fixed;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .connector-line svg line {
+    stroke: rgba(0,232,208,0.05);
+    stroke-width: 0.5;
+    stroke-dasharray: 4 8;
+  }
+  .connector-line svg circle {
+    fill: rgba(0,232,208,0.1);
+  }
+</style>
+</head>
+<body>
+
+<!-- CRT Effects -->
+<div class="crt-scanlines"></div>
+<div class="crt-vignette"></div>
+<div class="crt-flicker"></div>
+
+<!-- Grid floor -->
+<div class="grid-floor"></div>
+
+<!-- Geometric decorations -->
+<div class="edge-bracket tl">&#x250C;</div>
+<div class="edge-bracket tr">&#x2510;</div>
+<div class="edge-bracket bl">&#x2514;</div>
+<div class="edge-bracket br">&#x2518;</div>
+
+<!-- gmunk-style decorative geometry -->
+<div class="geo-deco" style="top:0;left:0;width:100%;height:100%">
+  <svg width="100%" height="100%" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+    <!-- Outer ring decoration (top-left area) -->
+    <circle class="ring" cx="150" cy="540" r="400"/>
+    <circle class="ring" cx="150" cy="540" r="395"/>
+    <circle class="ring" cx="150" cy="540" r="320"/>
+
+    <!-- Angular technical lines -->
+    <path class="line" d="M0 180 L120 180 L140 160"/>
+    <path class="line" d="M0 200 L100 200 L120 180"/>
+    <path class="line-bright" d="M0 190 L110 190 L130 170"/>
+
+    <path class="line" d="M1920 180 L1800 180 L1780 160"/>
+    <path class="line" d="M1920 200 L1820 200 L1800 180"/>
+    <path class="line-bright" d="M1920 190 L1810 190 L1790 170"/>
+
+    <!-- Horizontal technical lines across bottom -->
+    <path class="line" d="M400 1040 L600 1040 L620 1020 L900 1020"/>
+    <path class="line" d="M1020 1020 L1300 1020 L1320 1040 L1520 1040"/>
+
+    <!-- Small hexagonal accents -->
+    <polygon class="line-bright" points="960,80 972,87 972,101 960,108 948,101 948,87"/>
+    <polygon class="line" points="960,80 975,89 975,103 960,112 945,103 945,89"/>
+
+    <!-- Data point clusters -->
+    <circle class="dot" cx="290" cy="180" r="2"/>
+    <circle class="dot" cx="300" cy="175" r="1.5"/>
+    <circle class="dot" cx="310" cy="182" r="1"/>
+
+    <circle class="dot" cx="1630" cy="180" r="2"/>
+    <circle class="dot" cx="1620" cy="175" r="1.5"/>
+    <circle class="dot" cx="1610" cy="182" r="1"/>
+
+    <!-- Vertical rule lines alongside main chat area -->
+    <line class="line" x1="295" y1="50" x2="295" y2="1050"/>
+    <line class="line" x1="1625" y1="50" x2="1625" y2="1050"/>
+
+    <!-- Tick marks on vertical rules -->
+    <line class="line-bright" x1="291" y1="200" x2="299" y2="200"/>
+    <line class="line-bright" x1="291" y1="400" x2="299" y2="400"/>
+    <line class="line-bright" x1="291" y1="600" x2="299" y2="600"/>
+    <line class="line-bright" x1="291" y1="800" x2="299" y2="800"/>
+
+    <line class="line-bright" x1="1621" y1="200" x2="1629" y2="200"/>
+    <line class="line-bright" x1="1621" y1="400" x2="1629" y2="400"/>
+    <line class="line-bright" x1="1621" y1="600" x2="1629" y2="600"/>
+    <line class="line-bright" x1="1621" y1="800" x2="1629" y2="800"/>
+
+    <!-- Concentric partial arcs (top center) -->
+    <path class="line" d="M 860 20 A 100 100 0 0 1 1060 20" />
+    <path class="line-bright" d="M 870 15 A 90 90 0 0 1 1050 15" />
+
+    <!-- Decorative angular frame fragments -->
+    <path class="line" d="M300 28 L340 28 L360 48"/>
+    <path class="line" d="M1620 28 L1580 28 L1560 48"/>
+    <path class="line" d="M300 1052 L340 1052 L360 1032"/>
+    <path class="line" d="M1620 1052 L1580 1052 L1560 1032"/>
+  </svg>
+</div>
+
+<!-- Slow-rotating ring (background decoration) -->
+<div class="ring-deco" style="left: 50%; top: 50%; margin-left: -300px; margin-top: -300px;">
+  <svg width="600" height="600" viewBox="0 0 600 600">
+    <circle cx="300" cy="300" r="298" stroke="rgba(0,232,208,0.015)" stroke-width="0.5" fill="none"/>
+    <circle cx="300" cy="300" r="290" stroke="rgba(0,232,208,0.02)" stroke-width="0.5" fill="none" stroke-dasharray="8 20"/>
+    <circle cx="300" cy="300" r="280" stroke="rgba(0,232,208,0.01)" stroke-width="0.5" fill="none"/>
+    <!-- Tick marks around the ring -->
+    <line x1="300" y1="2" x2="300" y2="12" stroke="rgba(0,232,208,0.04)" stroke-width="0.5"/>
+    <line x1="300" y1="588" x2="300" y2="598" stroke="rgba(0,232,208,0.04)" stroke-width="0.5"/>
+    <line x1="2" y1="300" x2="12" y2="300" stroke="rgba(0,232,208,0.04)" stroke-width="0.5"/>
+    <line x1="588" y1="300" x2="598" y2="300" stroke="rgba(0,232,208,0.04)" stroke-width="0.5"/>
+  </svg>
+</div>
+
+
+<div class="shell">
+
+  <!-- ══════════════════════════════════════
+       STATUS WINDOW (top-left)
+       ══════════════════════════════════════ -->
+  <div class="window win-status">
+    <div class="corner-tr"></div><div class="corner-bl"></div>
+    <div class="win-title">
+      <span class="win-title-text">System Status</span>
+      <div class="win-title-btn"></div>
+      <div class="win-title-btn close"></div>
+    </div>
+    <div class="win-body">
+      <div class="status-section-label">Gateway</div>
+      <div class="status-row"><span class="status-label">State</span><span class="status-val ok">ONLINE</span></div>
+      <div class="status-row"><span class="status-label">Port</span><span class="status-val">:18789</span></div>
+      <div class="status-row"><span class="status-label">Uptime</span><span class="status-val">4h 23m 17s</span></div>
+      <div class="status-row"><span class="status-label">Tick Rate</span><span class="status-val">60s</span></div>
+
+      <div class="status-section-label">Model</div>
+      <div class="status-row"><span class="status-label">Primary</span><span class="status-val" style="color:var(--orange);text-shadow:0 0 4px var(--orange-glow)">clu:latest</span></div>
+      <div class="status-row"><span class="status-label">Quant</span><span class="status-val">Q8_0</span></div>
+      <div class="status-row"><span class="status-label">Size</span><span class="status-val">8.5 GB</span></div>
+      <div class="status-row"><span class="status-label">Ollama</span><span class="status-val ok">CONNECTED</span></div>
+
+      <div class="status-section-label">Resources</div>
+      <div class="status-row"><span class="status-label">Memory</span><span class="status-val warn">1.2 GB</span></div>
+      <div class="status-row"><span class="status-label">API Calls</span><span class="status-val">847</span></div>
+      <div class="status-row"><span class="status-label">Avg Latency</span><span class="status-val">1.2s</span></div>
+
+      <div class="ascii-bar">
+        CPU  <span class="filled">████████</span>░░░░░░░░ 48%
+      </div>
+      <div class="ascii-bar">
+        MEM  <span class="filled">██████████████</span>░░ 82%
+      </div>
+      <div class="ascii-bar">
+        GPU  <span class="filled">███████████</span>░░░░░ 64%
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHANNELS WINDOW (bottom-left)
+       ══════════════════════════════════════ -->
+  <div class="window win-channels">
+    <div class="corner-tr"></div><div class="corner-bl"></div>
+    <div class="win-title">
+      <span class="win-title-text">Channels</span>
+      <div class="win-title-btn"></div>
+      <div class="win-title-btn close"></div>
+    </div>
+    <div class="win-body">
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">Discord</span>
+        <span class="ch-detail">3 guilds · 2m ago</span>
+      </div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">Telegram</span>
+        <span class="ch-detail">12 chats · 5m ago</span>
+      </div>
+      <div class="channel-entry">
+        <div class="ch-indicator off"></div>
+        <span class="ch-name">iMessage</span>
+        <span class="ch-detail">disconnected</span>
+      </div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">Nostr</span>
+        <span class="ch-detail">2 relays</span>
+      </div>
+
+      <div class="status-section-label" style="margin-top:12px">Cron Jobs</div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">daily-summary</span>
+        <span class="ch-detail">next: 18h</span>
+      </div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">health-check</span>
+        <span class="ch-detail">next: 52m</span>
+      </div>
+
+      <div class="status-section-label" style="margin-top:12px">Skills</div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">web_search</span>
+        <span class="ch-detail">active</span>
+      </div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">code_exec</span>
+        <span class="ch-detail">active</span>
+      </div>
+      <div class="channel-entry">
+        <div class="ch-indicator on"></div>
+        <span class="ch-name">file_manager</span>
+        <span class="ch-detail">active</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       MAIN CHAT TERMINAL (center)
+       ══════════════════════════════════════ -->
+  <div class="window win-chat">
+    <div class="corner-tr"></div><div class="corner-bl"></div>
+    <div class="win-title">
+      <span class="win-title-text">Terminal — CLU</span>
+      <span style="color:var(--text-dim);font-size:9px;letter-spacing:1px">session:7a3f</span>
+      <div style="flex:1"></div>
+      <div class="win-title-btn"></div>
+      <div class="win-title-btn"></div>
+      <div class="win-title-btn close"></div>
+    </div>
+    <div class="win-body">
+      <div class="chat-line">
+        <span class="chat-text dim">--- OpenClaw Terminal v2026.1.30 ---</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text dim">--- Connected to gateway :18789 ---</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text dim">--- Model: clu:latest (Q8_0) ---</span>
+      </div>
+      <hr class="chat-separator">
+
+      <div class="chat-line">
+        <span class="prompt user">user@grid ~$</span>
+        <span class="chat-text"> What's the status of all channels?</span>
+      </div>
+
+      <div class="chat-line" style="margin-bottom:2px">
+        <span class="prompt tool">[tool]</span>
+        <span class="chat-text tool-output"> channels.status → 4 channels queried</span>
+      </div>
+      <div class="chat-line" style="padding-left:20px;margin-bottom:2px">
+        <span class="chat-text tool-output">discord    : connected  (3 guilds, last_msg: 2m ago)</span>
+      </div>
+      <div class="chat-line" style="padding-left:20px;margin-bottom:2px">
+        <span class="chat-text tool-output">telegram   : connected  (12 chats, last_msg: 5m ago)</span>
+      </div>
+      <div class="chat-line" style="padding-left:20px;margin-bottom:2px">
+        <span class="chat-text tool-output">imessage   : offline</span>
+      </div>
+      <div class="chat-line" style="padding-left:20px">
+        <span class="chat-text tool-output">nostr      : connected  (2 relays)</span>
+      </div>
+
+      <div class="chat-line">
+        <span class="prompt clu">CLU ›</span>
+        <span class="chat-text clu-voice"> Channel diagnostics complete. Three of four pathways</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">are operating within normal parameters. Discord is fully</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">operational across 3 guilds. Telegram maintains 12 active</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">chat interfaces. The iMessage bridge has been severed —</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">requires re-authentication to restore the connection.</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">Nostr is broadcasting normally across 2 relays.</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">The Grid must be made whole. Shall I initiate the</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">iMessage reconnection sequence?</span>
+      </div>
+
+      <hr class="chat-separator">
+
+      <div class="chat-line">
+        <span class="prompt user">user@grid ~$</span>
+        <span class="chat-text"> Yes, reconnect iMessage</span>
+      </div>
+
+      <div class="chat-line" style="margin-bottom:2px">
+        <span class="prompt tool">[tool]</span>
+        <span class="chat-text tool-output"> channels.reconnect("imessage") → auth_required</span>
+      </div>
+
+      <div class="chat-line">
+        <span class="prompt clu">CLU ›</span>
+        <span class="chat-text clu-voice"> The bridge requests re-authentication. A verification</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">token has been generated. Navigate to Channels → iMessage</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">and scan the QR code with your device. I will monitor</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">the handshake and confirm when the link is established.</span>
+      </div>
+
+      <hr class="chat-separator">
+
+      <div class="chat-line">
+        <span class="prompt user">user@grid ~$</span>
+        <span class="chat-text"> Run the daily summary job now</span>
+      </div>
+
+      <div class="chat-line" style="margin-bottom:2px">
+        <span class="prompt tool">[tool]</span>
+        <span class="chat-text tool-output"> cron.job.run("daily-summary") → triggered</span>
+      </div>
+
+      <div class="chat-line">
+        <span class="prompt clu">CLU ›</span>
+        <span class="chat-text clu-voice"> The daily-summary process has been initiated. It will</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">compile activity metrics across all active channels and</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">deliver the consolidated digest. Expected completion:</span>
+      </div>
+      <div class="chat-line">
+        <span class="chat-text clu-voice">approximately 45 seconds. Everything proceeds as designed.</span>
+      </div>
+
+      <hr class="chat-separator">
+
+      <div class="chat-line">
+        <span class="prompt user">user@grid ~$</span>
+        <span class="cursor-block"></span>
+      </div>
+    </div>
+    <div class="chat-input-line">
+      <span class="input-prompt-char">user@grid ~$</span>
+      <input type="text" class="chat-input" placeholder="" autofocus>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SESSIONS WINDOW (top-right)
+       ══════════════════════════════════════ -->
+  <div class="window win-sessions">
+    <div class="corner-tr"></div><div class="corner-bl"></div>
+    <div class="win-title">
+      <span class="win-title-text">Active Sessions</span>
+      <span style="color:var(--text-dim);font-size:9px">3 connected</span>
+      <div style="flex:1"></div>
+      <div class="win-title-btn"></div>
+      <div class="win-title-btn close"></div>
+    </div>
+    <div class="win-body">
+      <div class="session-entry">
+        <div class="sess-pulse"></div>
+        <span class="sess-id">7A3F</span>
+        <span class="sess-source">Control UI (this)</span>
+        <span class="sess-model">clu:latest</span>
+      </div>
+      <div class="session-entry">
+        <div class="sess-pulse" style="animation-delay: 0.5s"></div>
+        <span class="sess-id">B2C1</span>
+        <span class="sess-source">Discord Bot</span>
+        <span class="sess-model">clu:latest</span>
+      </div>
+      <div class="session-entry">
+        <div class="sess-pulse" style="animation-delay: 1s"></div>
+        <span class="sess-id">E9D4</span>
+        <span class="sess-source">Telegram</span>
+        <span class="sess-model">clu:latest</span>
+      </div>
+
+      <div class="status-section-label" style="margin-top:10px">Nodes</div>
+      <div class="session-entry">
+        <div class="sess-pulse" style="background:var(--green);box-shadow:0 0 8px rgba(0,255,136,0.4)"></div>
+        <span class="sess-id" style="color:var(--green)">NODE</span>
+        <span class="sess-source">mac-mini</span>
+        <span class="sess-model">local</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       LOGS WINDOW (bottom-right)
+       ══════════════════════════════════════ -->
+  <div class="window win-logs">
+    <div class="corner-tr"></div><div class="corner-bl"></div>
+    <div class="win-title">
+      <span class="win-title-text">Gateway Log</span>
+      <span style="color:var(--text-dim);font-size:9px">live tail</span>
+      <div style="flex:1"></div>
+      <div class="win-title-btn"></div>
+      <div class="win-title-btn close"></div>
+    </div>
+    <div class="win-body">
+      <div class="log-entry"><span class="ts">08:42:31</span> <span class="lvl-ok">INF</span> <span class="msg">chat.stream.final sess=7A3F tok=142</span></div>
+      <div class="log-entry"><span class="ts">08:42:30</span> <span class="lvl-ok">INF</span> <span class="msg">cron.job.run id=daily-summary</span></div>
+      <div class="log-entry"><span class="ts">08:41:55</span> <span class="lvl-ok">INF</span> <span class="msg">chat.send sess=7A3F msg_len=38</span></div>
+      <div class="log-entry"><span class="ts">08:40:12</span> <span class="lvl-ok">INF</span> <span class="msg">discord.message guild=general usr=jamie</span></div>
+      <div class="log-entry"><span class="ts">08:39:30</span> <span class="lvl-ok">INF</span> <span class="msg">channels.reconnect target=imessage</span></div>
+      <div class="log-entry"><span class="ts">08:38:44</span> <span class="lvl-warn">WRN</span> <span class="msg">ollama.slow latency=3.2s threshold=2s</span></div>
+      <div class="log-entry"><span class="ts">08:37:01</span> <span class="lvl-ok">INF</span> <span class="msg">telegram.send chat=294 ok</span></div>
+      <div class="log-entry"><span class="ts">08:35:18</span> <span class="lvl-ok">INF</span> <span class="msg">presence.heartbeat node=mac-mini</span></div>
+      <div class="log-entry"><span class="ts">08:33:00</span> <span class="lvl-ok">INF</span> <span class="msg">tick health=ok sess=3 ch=3/4</span></div>
+      <div class="log-entry"><span class="ts">08:32:15</span> <span class="lvl-ok">INF</span> <span class="msg">discord.message guild=dev usr=bot</span></div>
+      <div class="log-entry"><span class="ts">08:30:00</span> <span class="lvl-ok">INF</span> <span class="msg">tick health=ok sess=3 ch=3/4</span></div>
+      <div class="log-entry"><span class="ts">08:28:42</span> <span class="lvl-warn">WRN</span> <span class="msg">imessage.bridge connection_lost</span></div>
+      <div class="log-entry"><span class="ts">08:27:00</span> <span class="lvl-ok">INF</span> <span class="msg">tick health=ok sess=3 ch=4/4</span></div>
+      <div class="log-entry"><span class="ts">08:25:33</span> <span class="lvl-ok">INF</span> <span class="msg">nostr.publish relay=wss://relay.damus.io</span></div>
+      <div class="log-entry"><span class="ts">08:24:00</span> <span class="lvl-ok">INF</span> <span class="msg">tick health=ok sess=3 ch=4/4</span></div>
+      <div class="log-entry"><span class="ts">08:22:18</span> <span class="lvl-ok">INF</span> <span class="msg">skill.invoke name=web_search</span></div>
+      <div class="log-entry"><span class="ts">08:21:00</span> <span class="lvl-ok">INF</span> <span class="msg">tick health=ok sess=3 ch=4/4</span></div>
+      <div class="log-entry"><span class="ts">08:19:44</span> <span class="lvl-ok">INF</span> <span class="msg">chat.stream.final sess=B2C1 tok=89</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom status bar -->
+<div class="bottom-bar">
+  <span class="bb-brand">OpenClaw</span>
+  <div class="bb-sep"></div>
+  <div class="bb-item"><div class="bb-dot ok"></div> gateway:18789</div>
+  <div class="bb-item"><div class="bb-dot ok"></div> ollama:11434</div>
+  <div class="bb-item"><div class="bb-dot off"></div> imessage</div>
+  <div class="bb-sep"></div>
+  <div class="bb-item">model: clu:latest</div>
+  <div class="bb-spacer"></div>
+  <div class="bb-item">⌘⇧O toggle</div>
+  <div class="bb-sep"></div>
+  <span class="bb-clock" id="clock">00:00:00</span>
+</div>
+
+<script>
+  // Live clock
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Auto-scroll logs to bottom
+  const logsBody = document.querySelector('.win-logs .win-body');
+  if (logsBody) logsBody.scrollTop = logsBody.scrollHeight;
+
+  // Auto-scroll chat to bottom
+  const chatBody = document.querySelector('.win-chat .win-body');
+  if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+</script>
+</body>
+</html>

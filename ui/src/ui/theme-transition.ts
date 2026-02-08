@@ -1,4 +1,4 @@
-import type { ThemeMode } from "./theme";
+import type { ThemeName } from "./theme";
 
 export type ThemeTransitionContext = {
   element?: HTMLElement | null;
@@ -7,10 +7,10 @@ export type ThemeTransitionContext = {
 };
 
 export type ThemeTransitionOptions = {
-  nextTheme: ThemeMode;
+  nextTheme: ThemeName;
   applyTheme: () => void;
   context?: ThemeTransitionContext;
-  currentTheme?: ThemeMode | null;
+  currentTheme?: ThemeName | null;
 };
 
 type DocumentWithViewTransition = Document & {

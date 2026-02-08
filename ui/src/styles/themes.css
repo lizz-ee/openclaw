@@ -1,0 +1,111 @@
+/* ═══ THE GRID (default) ═══
+   Tron Legacy Grid — cold cyan on black, CLU's orange for AI */
+:root,
+:root[data-theme="grid"] {
+  --pri: #00fce8;
+  --pri-bright: #70fffa;
+  --pri-mid: #00d4c0;
+  --pri-dim: #00897a;
+  --pri-ghost: rgba(0, 252, 232, 0.04);
+  --pri-border: rgba(0, 252, 232, 0.22);
+  --pri-glow: rgba(0, 252, 232, 0.55);
+
+  --acc: #ffaa20;
+  --acc-bright: #ffcc66;
+  --acc-dim: rgba(255, 170, 32, 0.15);
+  --acc-glow: rgba(255, 170, 32, 0.5);
+
+  --green: #00ff88;
+  --red: #ff4466;
+
+  --bg: #000000;
+  --panel: rgba(0, 4, 4, 0.90);
+  --text-bright: #e0fffc;
+  --text-dim: #00a99a;
+
+  --bracket: var(--pri);
+  --bracket-glow: var(--pri-glow);
+
+  --glow-text: 0 0 6px var(--pri-glow);
+  --glow-text-dim: 0 0 4px rgba(0, 252, 232, 0.2);
+  --glow-acc: 0 0 6px var(--acc-glow);
+  --glow-card: 0 0 2px var(--pri-glow), 0 0 30px rgba(0, 252, 232, 0.04);
+  --glow-card-hover: 0 0 3px var(--pri-glow), 0 0 40px rgba(0, 252, 232, 0.06);
+  --glow-card-drag: 0 0 6px var(--pri-glow), 0 0 60px rgba(0, 252, 232, 0.1);
+
+  color-scheme: dark;
+}
+
+/* ═══ THE OUTLANDS ═══
+   Flynn's Arcade + CLU's throne room — phosphor green + bronze gold */
+:root[data-theme="outlands"] {
+  --pri: #33ff66;
+  --pri-bright: #88ffaa;
+  --pri-mid: #22cc55;
+  --pri-dim: #0a7a30;
+  --pri-ghost: rgba(51, 255, 102, 0.04);
+  --pri-border: rgba(51, 255, 102, 0.20);
+  --pri-glow: rgba(51, 255, 102, 0.50);
+
+  --acc: #d4a030;
+  --acc-bright: #f0c860;
+  --acc-dim: rgba(212, 160, 48, 0.15);
+  --acc-glow: rgba(212, 160, 48, 0.45);
+
+  --green: #00ff88;
+  --red: #ff4466;
+
+  --bg: #000a00;
+  --panel: rgba(0, 6, 0, 0.90);
+  --text-bright: #d0ffd8;
+  --text-dim: #18a040;
+
+  --bracket: var(--pri);
+  --bracket-glow: var(--pri-glow);
+
+  --glow-text: 0 0 6px var(--pri-glow);
+  --glow-text-dim: 0 0 4px rgba(51, 255, 102, 0.2);
+  --glow-acc: 0 0 6px var(--acc-glow);
+  --glow-card: 0 0 2px var(--pri-glow), 0 0 30px rgba(51, 255, 102, 0.04);
+  --glow-card-hover: 0 0 3px var(--pri-glow), 0 0 40px rgba(51, 255, 102, 0.06);
+  --glow-card-drag: 0 0 6px var(--pri-glow), 0 0 60px rgba(51, 255, 102, 0.1);
+
+  color-scheme: dark;
+}
+
+/* ═══ END OF LINE ═══
+   End of Line Club — electric violet + acid lime + hot white */
+:root[data-theme="endofline"] {
+  --pri: #c470ff;
+  --pri-bright: #e0a0ff;
+  --pri-mid: #a050dd;
+  --pri-dim: #6030a0;
+  --pri-ghost: rgba(196, 112, 255, 0.04);
+  --pri-border: rgba(196, 112, 255, 0.20);
+  --pri-glow: rgba(196, 112, 255, 0.50);
+
+  --acc: #b0ff40;
+  --acc-bright: #d0ff80;
+  --acc-dim: rgba(176, 255, 64, 0.15);
+  --acc-glow: rgba(176, 255, 64, 0.45);
+
+  --green: #00ff88;
+  --red: #ff4466;
+
+  --bg: #06000c;
+  --panel: rgba(4, 0, 8, 0.90);
+  --text-bright: #f0eeff;
+  --text-dim: #8050c0;
+
+  --bracket: var(--acc);
+  --bracket-glow: var(--acc-glow);
+
+  --glow-text: 0 0 6px var(--pri-glow);
+  --glow-text-dim: 0 0 4px rgba(196, 112, 255, 0.2);
+  --glow-acc: 0 0 6px var(--acc-glow);
+  --glow-card: 0 0 2px var(--pri-glow), 0 0 30px rgba(196, 112, 255, 0.04);
+  --glow-card-hover: 0 0 3px var(--pri-glow), 0 0 40px rgba(196, 112, 255, 0.06);
+  --glow-card-drag: 0 0 6px var(--pri-glow), 0 0 60px rgba(196, 112, 255, 0.1);
+
+  color-scheme: dark;
+}

@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Concept F: The Grid Canvas</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --cyan: #00fce8;
+    --cyan-bright: #70fffa;
+    --cyan-mid: #00d4c0;
+    --cyan-dim: #00897a;
+    --cyan-ghost: rgba(0, 252, 232, 0.04);
+    --cyan-border: rgba(0, 252, 232, 0.22);
+    --cyan-glow: rgba(0, 252, 232, 0.55);
+    --orange: #ffaa20;
+    --orange-bright: #ffcc66;
+    --orange-dim: rgba(255, 170, 32, 0.15);
+    --orange-glow: rgba(255, 170, 32, 0.5);
+    --green: #00ff88;
+    --red: #ff4466;
+    --bg: #000000;
+    --panel: rgba(0, 4, 4, 0.90);
+    --text: #00fce8;
+    --text-dim: #00a99a;
+    --text-bright: #e0fffc;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    height: 100vh;
+    overflow: hidden;
+    cursor: default;
+    user-select: none;
+  }
+
+  /* ═══ CRT ═══ */
+  .crt-scanlines {
+    position: fixed; inset: 0; z-index: 99999;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg,
+      transparent, transparent 1px,
+      rgba(0,0,0,0.10) 1px, rgba(0,0,0,0.10) 2px);
+  }
+  .crt-vignette {
+    position: fixed; inset: 0; z-index: 99998;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center,
+      transparent 50%, rgba(0,0,0,0.4) 78%, rgba(0,0,0,0.75) 100%);
+  }
+
+  /* ═══ INFINITE CANVAS ═══ */
+  .canvas-viewport {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    cursor: grab;
+    z-index: 1;
+  }
+  .canvas-viewport:active { cursor: grabbing; }
+
+  .canvas-world {
+    position: absolute;
+    width: 6000px;
+    height: 4000px;
+    /* Grid dot pattern */
+    background:
+      radial-gradient(circle, rgba(0,252,232,0.08) 1px, transparent 1px),
+      radial-gradient(circle, rgba(0,252,232,0.03) 1px, transparent 1px);
+    background-size: 48px 48px, 12px 12px;
+    background-position: 0 0, 6px 6px;
+    transform-origin: 0 0;
+  }
+
+  /* ═══ GEOMETRY ON CANVAS ═══ */
+  .canvas-geo {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .canvas-geo svg { width: 100%; height: 100%; overflow: visible; }
+  .cg-line { stroke: rgba(0,252,232,0.04); stroke-width: 0.5; fill: none; }
+  .cg-line-b { stroke: rgba(0,252,232,0.08); stroke-width: 0.5; fill: none; }
+  .cg-ring { stroke: rgba(0,252,232,0.025); stroke-width: 0.5; fill: none; }
+  .cg-dot { fill: rgba(0,252,232,0.12); }
+
+  /* ═══ DRAGGABLE CARD ═══ */
+  .card {
+    position: absolute;
+    background: var(--panel);
+    border: 1px solid var(--cyan-border);
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    max-width: 600px;
+    box-shadow: 0 0 2px var(--cyan-glow), 0 0 30px rgba(0,252,232,0.04);
+    z-index: 10;
+    transition: box-shadow 0.2s;
+  }
+  .card:hover {
+    box-shadow: 0 0 3px var(--cyan-glow), 0 0 40px rgba(0,252,232,0.06);
+  }
+  .card.dragging {
+    z-index: 1000;
+    box-shadow: 0 0 6px var(--cyan-glow), 0 0 60px rgba(0,252,232,0.1);
+    opacity: 0.95;
+  }
+  .card.focused {
+    z-index: 100;
+    border-color: rgba(0,252,232,0.4);
+  }
+
+  /* Corner brackets */
+  .card::before {
+    content: '';
+    position: absolute; top: -1px; left: -1px;
+    width: 10px; height: 10px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+    z-index: 2; pointer-events: none;
+  }
+  .card::after {
+    content: '';
+    position: absolute; bottom: -1px; right: -1px;
+    width: 10px; height: 10px;
+    border-bottom: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+    z-index: 2; pointer-events: none;
+  }
+  .card .c-tr, .card .c-bl {
+    position: absolute;
+    width: 10px; height: 10px;
+    pointer-events: none; z-index: 2;
+  }
+  .card .c-tr {
+    top: -1px; right: -1px;
+    border-top: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+  }
+  .card .c-bl {
+    bottom: -1px; left: -1px;
+    border-bottom: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+  }
+
+  /* Card header (drag handle) */
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(0,252,232,0.08);
+    background: rgba(0,252,232,0.025);
+    cursor: grab;
+    flex-shrink: 0;
+    gap: 8px;
+  }
+  .card-head:active { cursor: grabbing; }
+
+  .card-title {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 6px var(--cyan-glow);
+    flex: 1;
+    white-space: nowrap;
+  }
+  .card-badge {
+    font-size: 9px; letter-spacing: 1px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .card-btns { display: flex; gap: 4px; flex-shrink: 0; }
+  .card-btn {
+    width: 8px; height: 8px;
+    border: 1px solid var(--cyan-border);
+    cursor: pointer;
+  }
+  .card-btn:hover { background: var(--cyan); }
+
+  .card-body {
+    padding: 8px 10px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    font-size: 11px;
+  }
+  .card-body::-webkit-scrollbar { width: 2px; }
+  .card-body::-webkit-scrollbar-track { background: transparent; }
+  .card-body::-webkit-scrollbar-thumb { background: rgba(0,252,232,0.15); }
+
+  /* ═══ RESIZE HANDLE ═══ */
+  .resize-handle {
+    position: absolute;
+    bottom: 0; right: 0;
+    width: 14px; height: 14px;
+    cursor: nwse-resize;
+    z-index: 3;
+  }
+  .resize-handle::before {
+    content: '';
+    position: absolute; bottom: 3px; right: 3px;
+    width: 6px; height: 6px;
+    border-right: 1px solid var(--cyan-dim);
+    border-bottom: 1px solid var(--cyan-dim);
+  }
+
+  /* ═══ SHARED ROW STYLES ═══ */
+  .row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 3px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,252,232,0.03);
+  }
+  .row:last-child { border-bottom: none; }
+  .r-label { color: var(--text-dim); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  .r-val { color: var(--cyan); text-shadow: 0 0 4px rgba(0,252,232,0.2); }
+  .r-val.ok { color: var(--green); text-shadow: 0 0 4px rgba(0,255,136,0.3); }
+  .r-val.warn { color: var(--orange); text-shadow: 0 0 4px var(--orange-glow); }
+  .r-val.clu { color: var(--orange); text-shadow: 0 0 6px var(--orange-glow); }
+
+  .abar { font-size: 9px; color: var(--text-dim); line-height: 1.4; padding: 1px 0; }
+  .abar .fill { color: var(--cyan); text-shadow: 0 0 2px rgba(0,252,232,0.2); }
+
+  /* Channel/session rows */
+  .ch-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0; font-size: 11px;
+    border-bottom: 1px solid rgba(0,252,232,0.03);
+  }
+  .ch-row:last-child { border-bottom: none; }
+  .dot { width: 5px; height: 5px; flex-shrink: 0; }
+  .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(0,255,136,0.5); }
+  .dot.off { background: var(--red); box-shadow: 0 0 4px rgba(255,68,102,0.3); opacity: 0.7; }
+  .dot.pulse {
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan-glow);
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .ch-name { flex: 1; color: var(--cyan); }
+  .ch-info { color: var(--text-dim); font-size: 9px; }
+
+  /* Log lines */
+  .log-line {
+    font-size: 9px; line-height: 1.6; color: var(--text-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .log-ts { color: var(--cyan-dim); }
+  .log-ok { color: var(--cyan-mid); }
+  .log-warn { color: var(--orange); text-shadow: 0 0 3px var(--orange-glow); }
+
+  /* Activity */
+  .act-row { padding: 4px 0; border-bottom: 1px solid rgba(0,252,232,0.03); font-size: 10px; }
+  .act-row:last-child { border-bottom: none; }
+  .act-time { color: var(--text-dim); font-size: 8px; letter-spacing: 1px; }
+  .act-text { color: var(--cyan-dim); margin-top: 1px; }
+  .act-text .hl { color: var(--cyan); text-shadow: 0 0 3px rgba(0,252,232,0.2); }
+
+  /* ═══ CHAT (special card) ═══ */
+  .chat-body {
+    display: flex; flex-direction: column;
+    min-height: 0; flex: 1;
+  }
+  .chat-scroll {
+    flex: 1; overflow-y: auto; padding: 8px 10px;
+  }
+  .chat-scroll::-webkit-scrollbar { width: 2px; }
+  .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: rgba(0,252,232,0.12); }
+
+  .chat-hdr { font-size: 10px; color: var(--text-dim); padding-bottom: 6px; border-bottom: 1px solid rgba(0,252,232,0.04); margin-bottom: 6px; line-height: 1.5; }
+  .msg-block { margin-bottom: 6px; }
+  .msg-line { font-size: 12px; line-height: 1.6; }
+  .p-user { color: var(--cyan-bright); text-shadow: 0 0 5px var(--cyan-glow); }
+  .p-clu { color: var(--orange); text-shadow: 0 0 5px var(--orange-glow); }
+  .p-tool { color: var(--green); text-shadow: 0 0 4px rgba(0,255,136,0.3); }
+  .t-user { color: var(--text-bright); }
+  .t-clu { color: var(--orange-bright); text-shadow: 0 0 2px rgba(255,170,32,0.15); }
+  .t-tool { color: var(--cyan-dim); font-size: 11px; padding-left: 14px; border-left: 1px solid rgba(0,255,136,0.15); margin: 2px 0 2px 6px; }
+  .chat-sep { border: none; border-top: 1px solid rgba(0,252,232,0.04); margin: 5px 0; }
+  .cursor-blink {
+    display: inline-block; width: 7px; height: 12px;
+    background: var(--cyan); box-shadow: 0 0 5px var(--cyan-glow);
+    animation: blink 1s step-end infinite; vertical-align: text-bottom;
+  }
+  @keyframes blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
+
+  .chat-input-area {
+    display: flex; align-items: center;
+    padding: 6px 10px;
+    border-top: 1px solid rgba(0,252,232,0.1);
+    background: rgba(0,252,232,0.015);
+    flex-shrink: 0;
+  }
+  .ci-prompt { color: var(--cyan-bright); text-shadow: 0 0 5px var(--cyan-glow); font-size: 12px; margin-right: 8px; }
+  .ci-input {
+    flex: 1; background: transparent; border: none;
+    color: var(--text-bright); font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; outline: none; caret-color: var(--cyan);
+  }
+  .ci-input::placeholder { color: var(--text-dim); }
+
+  /* ═══ HUD OVERLAY (fixed) ═══ */
+  .hud-top {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 34px;
+    display: flex; align-items: center;
+    padding: 0 14px; gap: 14px;
+    background: rgba(0,0,0,0.9);
+    border-bottom: 1px solid var(--cyan-border);
+    z-index: 10000;
+    pointer-events: auto;
+  }
+  .hud-top::after {
+    content: ''; position: absolute; bottom: -1px; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-glow), transparent);
+    opacity: 0.25;
+  }
+
+  .hud-brand {
+    font-size: 11px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--cyan); text-shadow: 0 0 10px var(--cyan-glow);
+  }
+  .hud-sep { width: 1px; height: 14px; background: var(--cyan-border); }
+  .hud-item { font-size: 9px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; letter-spacing: 1px; text-transform: uppercase; }
+  .hud-dot { width: 4px; height: 4px; }
+  .hud-dot.ok { background: var(--green); box-shadow: 0 0 4px rgba(0,255,136,0.5); }
+  .hud-dot.off { background: var(--red); box-shadow: 0 0 3px rgba(255,68,102,0.3); opacity: 0.7; }
+  .hud-spacer { flex: 1; }
+  .hud-model {
+    font-size: 9px; letter-spacing: 2px;
+    color: var(--orange); text-shadow: 0 0 6px var(--orange-glow);
+    border: 1px solid var(--orange-dim); padding: 1px 8px;
+  }
+  .hud-clock {
+    font-size: 10px; letter-spacing: 2px;
+    color: var(--cyan); text-shadow: 0 0 5px var(--cyan-glow);
+  }
+
+  .hud-bottom {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 24px;
+    display: flex; align-items: center;
+    padding: 0 14px; gap: 12px;
+    background: rgba(0,0,0,0.9);
+    border-top: 1px solid var(--cyan-border);
+    z-index: 10000;
+    font-size: 8px; letter-spacing: 1px; color: var(--text-dim);
+  }
+  .hud-bottom::before {
+    content: ''; position: absolute; top: -1px; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-glow), transparent);
+    opacity: 0.2;
+  }
+  .hud-coord { color: var(--cyan-dim); }
+  .hud-zoom { color: var(--cyan-dim); }
+  .hud-hint { color: var(--text-dim); }
+  .hud-hint kbd {
+    padding: 0 4px; border: 1px solid rgba(0,252,232,0.08);
+    font-size: 8px; color: var(--text-dim);
+  }
+
+  /* ═══ MINIMAP ═══ */
+  .minimap {
+    position: fixed;
+    bottom: 32px; right: 8px;
+    width: 160px; height: 100px;
+    border: 1px solid var(--cyan-border);
+    background: rgba(0,0,0,0.85);
+    z-index: 10001;
+    overflow: hidden;
+  }
+  .minimap::before {
+    content: '';
+    position: absolute; top: -1px; left: -1px;
+    width: 8px; height: 8px;
+    border-top: 1px solid var(--cyan);
+    border-left: 1px solid var(--cyan);
+  }
+  .minimap::after {
+    content: '';
+    position: absolute; bottom: -1px; right: -1px;
+    width: 8px; height: 8px;
+    border-bottom: 1px solid var(--cyan);
+    border-right: 1px solid var(--cyan);
+  }
+  .minimap-label {
+    position: absolute; top: 2px; left: 4px;
+    font-size: 7px; letter-spacing: 1px;
+    color: var(--cyan-dim); text-transform: uppercase;
+  }
+  .minimap-viewport {
+    position: absolute;
+    border: 1px solid rgba(0,252,232,0.5);
+    background: rgba(0,252,232,0.05);
+  }
+  .minimap-card {
+    position: absolute;
+    background: rgba(0,252,232,0.2);
+  }
+</style>
+</head>
+<body>
+
+<div class="crt-scanlines"></div>
+<div class="crt-vignette"></div>
+
+<!-- ═══ HUD (fixed top/bottom bars) ═══ -->
+<div class="hud-top">
+  <span class="hud-brand">OpenClaw</span>
+  <div class="hud-sep"></div>
+  <div class="hud-item"><div class="hud-dot ok"></div> Gateway</div>
+  <div class="hud-item"><div class="hud-dot ok"></div> Ollama</div>
+  <div class="hud-item"><div class="hud-dot ok"></div> 3 Ch</div>
+  <div class="hud-item"><div class="hud-dot off"></div> iMsg</div>
+  <div class="hud-spacer"></div>
+  <div class="hud-model">CLU:LATEST</div>
+  <div class="hud-sep"></div>
+  <span class="hud-clock" id="clock">00:00:00</span>
+</div>
+
+<div class="hud-bottom">
+  <span class="hud-coord" id="coords">x: 0  y: 0</span>
+  <div style="width:1px;height:10px;background:var(--cyan-border)"></div>
+  <span class="hud-zoom" id="zoom-display">100%</span>
+  <div style="flex:1"></div>
+  <span class="hud-hint">drag to pan · scroll to zoom · drag headers to move cards</span>
+  <div style="width:1px;height:10px;background:var(--cyan-border)"></div>
+  <span style="color:var(--cyan-dim)">⌘⇧O toggle</span>
+</div>
+
+<!-- ═══ MINIMAP ═══ -->
+<div class="minimap" id="minimap">
+  <span class="minimap-label">Map</span>
+  <div class="minimap-viewport" id="minimap-vp"></div>
+</div>
+
+<!-- ═══ CANVAS ═══ -->
+<div class="canvas-viewport" id="viewport">
+  <div class="canvas-world" id="world">
+
+    <!-- Background geometry -->
+    <div class="canvas-geo">
+      <svg viewBox="0 0 6000 4000">
+        <!-- Large rings -->
+        <circle class="cg-ring" cx="3000" cy="2000" r="800"/>
+        <circle class="cg-ring" cx="3000" cy="2000" r="795"/>
+        <circle class="cg-ring" cx="3000" cy="2000" r="700" stroke-dasharray="8 20"/>
+        <circle class="cg-ring" cx="3000" cy="2000" r="600"/>
+
+        <!-- Cross lines -->
+        <line class="cg-line" x1="2200" y1="2000" x2="3800" y2="2000"/>
+        <line class="cg-line" x1="3000" y1="1200" x2="3000" y2="2800"/>
+
+        <!-- Angular connectors -->
+        <path class="cg-line-b" d="M1800 800 L2000 800 L2020 780"/>
+        <path class="cg-line-b" d="M4200 800 L4000 800 L3980 780"/>
+        <path class="cg-line-b" d="M1800 3200 L2000 3200 L2020 3220"/>
+        <path class="cg-line-b" d="M4200 3200 L4000 3200 L3980 3220"/>
+
+        <!-- Hex accents -->
+        <polygon class="cg-line-b" points="3000,1190 3012,1197 3012,1211 3000,1218 2988,1211 2988,1197"/>
+        <polygon class="cg-line-b" points="3000,2810 3012,2817 3012,2831 3000,2838 2988,2831 2988,2817"/>
+
+        <!-- Data dots -->
+        <circle class="cg-dot" cx="2000" cy="800" r="3"/>
+        <circle class="cg-dot" cx="4000" cy="800" r="3"/>
+        <circle class="cg-dot" cx="2000" cy="3200" r="3"/>
+        <circle class="cg-dot" cx="4000" cy="3200" r="3"/>
+      </svg>
+    </div>
+
+    <!-- ═══ CARD: CHAT (large, center) ═══ -->
+    <div class="card" id="card-chat" style="left:1800px;top:800px;width:520px;height:580px;" data-id="chat">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Terminal — CLU</span>
+        <span class="card-badge">session:7a3f</span>
+        <div class="card-btns"><div class="card-btn"></div><div class="card-btn"></div></div>
+      </div>
+      <div class="chat-body">
+        <div class="chat-scroll">
+          <div class="chat-hdr">
+            --- OpenClaw Terminal v2026.1.30 ---<br>
+            --- gateway :18789 · model: clu:latest ---
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-user">user@grid ~$</span> <span class="t-user">What's the status of all channels?</span></div>
+          </div>
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-tool">[tool]</span> <span style="color:var(--green);font-size:10px">channels.status</span></div>
+            <div class="t-tool">discord: connected (3 guilds)<br>telegram: connected (12 chats)<br>imessage: offline<br>nostr: connected (2 relays)</div>
+          </div>
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-clu">CLU ›</span></div>
+            <div class="msg-line"><span class="t-clu">Channel diagnostics complete. Three of four</span></div>
+            <div class="msg-line"><span class="t-clu">pathways operating within normal parameters.</span></div>
+            <div class="msg-line"><span class="t-clu" style="color:var(--green)">Discord</span><span class="t-clu"> — Operational. 3 guilds.</span></div>
+            <div class="msg-line"><span class="t-clu" style="color:var(--green)">Telegram</span><span class="t-clu"> — Active. 12 interfaces.</span></div>
+            <div class="msg-line"><span class="t-clu" style="color:var(--red)">iMessage</span><span class="t-clu"> — Bridge severed.</span></div>
+            <div class="msg-line"><span class="t-clu" style="color:var(--green)">Nostr</span><span class="t-clu"> — 2 relays broadcasting.</span></div>
+            <div class="msg-line"><span class="t-clu">Shall I reconnect iMessage?</span></div>
+          </div>
+          <hr class="chat-sep">
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-user">user@grid ~$</span> <span class="t-user">Yes, do it</span></div>
+          </div>
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-tool">[tool]</span> <span style="color:var(--green);font-size:10px">channels.reconnect("imessage")</span></div>
+            <div class="t-tool">auth_required (QR pending)</div>
+          </div>
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-clu">CLU ›</span></div>
+            <div class="msg-line"><span class="t-clu">Verification code generated. Navigate to</span></div>
+            <div class="msg-line"><span class="t-clu">Channels → iMessage to complete. The Grid</span></div>
+            <div class="msg-line"><span class="t-clu">must be made whole.</span></div>
+          </div>
+          <hr class="chat-sep">
+          <div class="msg-block">
+            <div class="msg-line"><span class="p-user">user@grid ~$</span> <span class="cursor-blink"></span></div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <span class="ci-prompt">user@grid ~$</span>
+          <input type="text" class="ci-input" placeholder="">
+        </div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: SYSTEM STATUS ═══ -->
+    <div class="card" id="card-system" style="left:1400px;top:800px;width:280px;height:400px;" data-id="system">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">System</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="row"><span class="r-label">Gateway</span><span class="r-val ok">ONLINE</span></div>
+        <div class="row"><span class="r-label">Uptime</span><span class="r-val">4h 23m</span></div>
+        <div class="row"><span class="r-label">Model</span><span class="r-val clu">clu:latest</span></div>
+        <div class="row"><span class="r-label">Quant</span><span class="r-val">Q8_0 · 8.5GB</span></div>
+        <div class="row"><span class="r-label">Tick</span><span class="r-val">60s</span></div>
+        <div class="row"><span class="r-label">Sessions</span><span class="r-val">3</span></div>
+        <div class="row"><span class="r-label">API Calls</span><span class="r-val">847</span></div>
+        <div class="row"><span class="r-label">Avg Lat</span><span class="r-val">1.2s</span></div>
+        <div class="row"><span class="r-label">Memory</span><span class="r-val warn">1.2 GB</span></div>
+        <div style="margin-top:8px">
+          <div class="abar">CPU  <span class="fill">████████</span>░░░░░░░░ 48%</div>
+          <div class="abar">MEM  <span class="fill">██████████████</span>░░ 82%</div>
+          <div class="abar">GPU  <span class="fill">███████████</span>░░░░░ 64%</div>
+        </div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: CHANNELS ═══ -->
+    <div class="card" id="card-channels" style="left:2440px;top:800px;width:260px;height:200px;" data-id="channels">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Channels</span>
+        <span class="card-badge">3/4</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">Discord</span><span class="ch-info">3 guilds · 2m</span></div>
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">Telegram</span><span class="ch-info">12 chats · 5m</span></div>
+        <div class="ch-row"><div class="dot off"></div><span class="ch-name">iMessage</span><span class="ch-info">auth pending</span></div>
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">Nostr</span><span class="ch-info">2 relays</span></div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: SESSIONS ═══ -->
+    <div class="card" id="card-sessions" style="left:2440px;top:1060px;width:260px;height:180px;" data-id="sessions">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Sessions</span>
+        <span class="card-badge">3 active</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="ch-row"><div class="dot pulse"></div><span class="ch-name" style="width:34px;flex:none;font-size:10px;color:var(--cyan-bright)">7A3F</span><span class="ch-name">Control UI</span><span class="ch-info">clu:latest</span></div>
+        <div class="ch-row"><div class="dot pulse" style="animation-delay:.5s"></div><span class="ch-name" style="width:34px;flex:none;font-size:10px;color:var(--cyan-bright)">B2C1</span><span class="ch-name">Discord</span><span class="ch-info">clu:latest</span></div>
+        <div class="ch-row"><div class="dot pulse" style="animation-delay:1s"></div><span class="ch-name" style="width:34px;flex:none;font-size:10px;color:var(--cyan-bright)">E9D4</span><span class="ch-name">Telegram</span><span class="ch-info">clu:latest</span></div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: ACTIVITY ═══ -->
+    <div class="card" id="card-activity" style="left:1400px;top:1260px;width:280px;height:260px;" data-id="activity">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Activity</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="act-row"><div class="act-time">2M AGO</div><div class="act-text"><span class="hl">discord</span> msg processed #general</div></div>
+        <div class="act-row"><div class="act-time">5M AGO</div><div class="act-text"><span class="hl">cron</span> daily-summary ok</div></div>
+        <div class="act-row"><div class="act-time">12M AGO</div><div class="act-text"><span class="hl">telegram</span> 2 msgs sent</div></div>
+        <div class="act-row"><div class="act-time">18M AGO</div><div class="act-text"><span class="hl">node</span> mac-mini heartbeat</div></div>
+        <div class="act-row"><div class="act-time">30M AGO</div><div class="act-text"><span class="hl">skill</span> web_search ×3</div></div>
+        <div class="act-row"><div class="act-time">1H AGO</div><div class="act-text"><span class="hl">config</span> reloaded</div></div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: LOG ═══ -->
+    <div class="card" id="card-log" style="left:2440px;top:1300px;width:340px;height:240px;" data-id="log">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Log</span>
+        <span class="card-badge">live</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="log-line"><span class="log-ts">08:42:31</span> <span class="log-ok">INF</span> chat.stream.final s=7A3F t=142</div>
+        <div class="log-line"><span class="log-ts">08:42:30</span> <span class="log-ok">INF</span> cron.run id=daily-summary</div>
+        <div class="log-line"><span class="log-ts">08:41:55</span> <span class="log-ok">INF</span> chat.send s=7A3F len=38</div>
+        <div class="log-line"><span class="log-ts">08:40:12</span> <span class="log-ok">INF</span> discord.msg guild=general</div>
+        <div class="log-line"><span class="log-ts">08:39:30</span> <span class="log-ok">INF</span> channels.reconnect imessage</div>
+        <div class="log-line"><span class="log-ts">08:38:44</span> <span class="log-warn">WRN</span> ollama.slow lat=3.2s</div>
+        <div class="log-line"><span class="log-ts">08:37:01</span> <span class="log-ok">INF</span> telegram.send chat=294</div>
+        <div class="log-line"><span class="log-ts">08:35:18</span> <span class="log-ok">INF</span> presence.hb mac-mini</div>
+        <div class="log-line"><span class="log-ts">08:33:00</span> <span class="log-ok">INF</span> tick ok s=3 ch=3/4</div>
+        <div class="log-line"><span class="log-ts">08:30:00</span> <span class="log-ok">INF</span> tick ok s=3 ch=3/4</div>
+        <div class="log-line"><span class="log-ts">08:28:42</span> <span class="log-warn">WRN</span> imessage.bridge lost</div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: SKILLS ═══ -->
+    <div class="card" id="card-skills" style="left:2810px;top:800px;width:220px;height:200px;" data-id="skills">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Skills</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">web_search</span><span class="ch-info">active</span></div>
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">code_exec</span><span class="ch-info">active</span></div>
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">file_manager</span><span class="ch-info">active</span></div>
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">image_gen</span><span class="ch-info">active</span></div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+    <!-- ═══ CARD: CRON ═══ -->
+    <div class="card" id="card-cron" style="left:2810px;top:1060px;width:220px;height:150px;" data-id="cron">
+      <div class="c-tr"></div><div class="c-bl"></div>
+      <div class="card-head">
+        <span class="card-title">Cron</span>
+        <div class="card-btns"><div class="card-btn"></div></div>
+      </div>
+      <div class="card-body">
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">daily-summary</span><span class="ch-info">18h</span></div>
+        <div class="ch-row"><div class="dot on"></div><span class="ch-name">health-check</span><span class="ch-info">52m</span></div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════
+// CANVAS PAN & ZOOM
+// ═══════════════════════════════
+const viewport = document.getElementById('viewport');
+const world = document.getElementById('world');
+const coordsEl = document.getElementById('coords');
+const zoomEl = document.getElementById('zoom-display');
+
+let panX = -1600, panY = -600;
+let scale = 1;
+let isPanning = false;
+let panStartX, panStartY;
+
+function applyTransform() {
+  world.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  coordsEl.textContent = `x: ${Math.round(-panX)}  y: ${Math.round(-panY)}`;
+  zoomEl.textContent = `${Math.round(scale * 100)}%`;
+  updateMinimap();
+}
+
+// Pan
+viewport.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.card')) return;
+  isPanning = true;
+  panStartX = e.clientX - panX;
+  panStartY = e.clientY - panY;
+  viewport.setPointerCapture(e.pointerId);
+});
+viewport.addEventListener('pointermove', (e) => {
+  if (!isPanning) return;
+  panX = e.clientX - panStartX;
+  panY = e.clientY - panStartY;
+  applyTransform();
+});
+viewport.addEventListener('pointerup', () => { isPanning = false; });
+
+// Zoom
+viewport.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const worldX = (mx - panX) / scale;
+  const worldY = (my - panY) / scale;
+
+  const factor = e.deltaY > 0 ? 0.92 : 1.08;
+  scale = Math.min(3, Math.max(0.2, scale * factor));
+
+  panX = mx - worldX * scale;
+  panY = my - worldY * scale;
+  applyTransform();
+}, { passive: false });
+
+// ═══════════════════════════════
+// CARD DRAGGING
+// ═══════════════════════════════
+let dragCard = null, dragOffX = 0, dragOffY = 0;
+
+document.querySelectorAll('.card-head').forEach(head => {
+  head.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    const card = head.closest('.card');
+    card.classList.add('dragging', 'focused');
+    document.querySelectorAll('.card').forEach(c => { if (c !== card) c.classList.remove('focused'); });
+
+    const cardRect = card.getBoundingClientRect();
+    const worldRect = world.getBoundingClientRect();
+    dragCard = card;
+    dragOffX = e.clientX - cardRect.left;
+    dragOffY = e.clientY - cardRect.top;
+    head.setPointerCapture(e.pointerId);
+  });
+
+  head.addEventListener('pointermove', (e) => {
+    if (!dragCard) return;
+    const worldRect = world.getBoundingClientRect();
+    const newLeft = (e.clientX - worldRect.left - dragOffX) / scale;
+    const newTop = (e.clientY - worldRect.top - dragOffY) / scale;
+    dragCard.style.left = `${newLeft}px`;
+    dragCard.style.top = `${newTop}px`;
+    updateMinimap();
+  });
+
+  head.addEventListener('pointerup', () => {
+    if (dragCard) dragCard.classList.remove('dragging');
+    dragCard = null;
+  });
+});
+
+// ═══════════════════════════════
+// CARD RESIZING
+// ═══════════════════════════════
+document.querySelectorAll('.resize-handle').forEach(handle => {
+  let resizeCard = null, startW, startH, startMX, startMY;
+
+  handle.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    resizeCard = handle.closest('.card');
+    startW = resizeCard.offsetWidth;
+    startH = resizeCard.offsetHeight;
+    startMX = e.clientX;
+    startMY = e.clientY;
+    handle.setPointerCapture(e.pointerId);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!resizeCard) return;
+    const dw = (e.clientX - startMX) / scale;
+    const dh = (e.clientY - startMY) / scale;
+    resizeCard.style.width = Math.max(180, startW + dw) + 'px';
+    resizeCard.style.height = Math.max(100, startH + dh) + 'px';
+    updateMinimap();
+  });
+
+  handle.addEventListener('pointerup', () => { resizeCard = null; });
+});
+
+// ═══════════════════════════════
+// MINIMAP
+// ═══════════════════════════════
+const minimap = document.getElementById('minimap');
+const minimapVp = document.getElementById('minimap-vp');
+const WORLD_W = 6000, WORLD_H = 4000;
+const MM_W = 160, MM_H = 100;
+
+function updateMinimap() {
+  const sx = MM_W / WORLD_W;
+  const sy = MM_H / WORLD_H;
+
+  // Viewport rect
+  const vw = window.innerWidth / scale;
+  const vh = (window.innerHeight - 58) / scale;
+  const vx = -panX / scale;
+  const vy = -panY / scale;
+
+  minimapVp.style.left = (vx * sx) + 'px';
+  minimapVp.style.top = (vy * sy) + 'px';
+  minimapVp.style.width = (vw * sx) + 'px';
+  minimapVp.style.height = (vh * sy) + 'px';
+
+  // Remove old card rects
+  minimap.querySelectorAll('.minimap-card').forEach(c => c.remove());
+
+  // Draw card rects
+  document.querySelectorAll('.card').forEach(card => {
+    const l = parseFloat(card.style.left);
+    const t = parseFloat(card.style.top);
+    const w = card.offsetWidth;
+    const h = card.offsetHeight;
+    const div = document.createElement('div');
+    div.className = 'minimap-card';
+    div.style.left = (l * sx) + 'px';
+    div.style.top = (t * sy) + 'px';
+    div.style.width = (w * sx) + 'px';
+    div.style.height = (h * sy) + 'px';
+    minimap.appendChild(div);
+  });
+}
+
+// Clock
+function tick() {
+  document.getElementById('clock').textContent = new Date().toTimeString().split(' ')[0];
+}
+setInterval(tick, 1000);
+tick();
+
+// Init
+applyTransform();
+
+// Auto-scroll chat
+const chatScroll = document.querySelector('.chat-scroll');
+if (chatScroll) chatScroll.scrollTop = 99999;
+
+// Focus chat input on click
+document.querySelector('.ci-input')?.focus();
+</script>
+</body>
+</html>

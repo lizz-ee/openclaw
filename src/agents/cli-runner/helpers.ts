@@ -240,6 +240,7 @@ export function buildSystemPrompt(params: {
     docsPath: params.docsPath,
     runtimeInfo,
     toolNames: params.tools.map((tool) => tool.name),
+    skipToolSummaries: params.tools.length > 0,
     modelAliasLines: buildModelAliasLines(params.config),
     userTimezone,
     userTime,

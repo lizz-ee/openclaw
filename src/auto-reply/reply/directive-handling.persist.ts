@@ -37,6 +37,7 @@ export async function persistInlineDirectives(params: {
   defaultModel: string;
   aliasIndex: ModelAliasIndex;
   allowedModelKeys: Set<string>;
+  allowAny?: boolean;
   provider: string;
   model: string;
   initialModelLabel: string;
@@ -149,7 +150,7 @@ export async function persistInlineDirectives(params: {
       });
       if (resolved) {
         const key = modelKey(resolved.ref.provider, resolved.ref.model);
-        if (allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
+        if (params.allowAny || allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
           let profileOverride: string | undefined;
           if (directives.rawModelProfile) {
             const profileResolved = resolveProfileOverride({

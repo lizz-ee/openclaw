@@ -30,6 +30,7 @@ export async function applyInlineDirectivesFastLane(params: {
   allowedModelCatalog: Awaited<
     ReturnType<typeof import("../../agents/model-catalog.js").loadModelCatalog>
   >;
+  allowAny?: boolean;
   resetModelOverride: boolean;
   provider: string;
   model: string;
@@ -116,6 +117,7 @@ export async function applyInlineDirectivesFastLane(params: {
     aliasIndex,
     allowedModelKeys,
     allowedModelCatalog,
+    allowAny: params.allowAny,
     resetModelOverride,
     provider,
     model,

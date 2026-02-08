@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Concept C: End of Line</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #08090e;
+    --panel: rgba(12, 14, 22, 0.95);
+    --glow-orange: #ff8c00;
+    --glow-amber: #ffb340;
+    --glow-cyan: #00d4ff;
+    --text: #9ca0b0;
+    --text-bright: #e8eaf0;
+    --text-dim: #3a3f52;
+    --ok: #00e676;
+    --warn: #ffab00;
+    --danger: #ff3d3d;
+    --border: rgba(255, 140, 0, 0.1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Full screen layout: chat-dominant ── */
+  .shell {
+    display: grid;
+    grid-template-rows: 44px 1fr 28px;
+    height: 100vh;
+    position: relative;
+  }
+
+  /* ── Minimal top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,9,14,0.98);
+    gap: 16px;
+  }
+  .tb-brand {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700; font-size: 13px;
+    letter-spacing: 4px;
+    color: var(--glow-orange);
+    text-shadow: 0 0 12px rgba(255,140,0,0.35);
+  }
+  .tb-sep {
+    width: 1px; height: 20px; background: var(--border);
+  }
+  .tb-tab {
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 12px 12px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tb-tab:hover { color: var(--text); }
+  .tb-tab.active {
+    color: var(--glow-orange);
+    border-bottom-color: var(--glow-orange);
+    text-shadow: 0 0 8px rgba(255,140,0,0.3);
+  }
+  .tb-spacer { flex: 1; }
+  .tb-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; letter-spacing: 1px; color: var(--text-dim);
+  }
+  .tb-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .tb-model {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px; letter-spacing: 2px;
+    color: var(--glow-orange);
+    opacity: 0.7;
+  }
+
+  /* ── Main content: split layout ── */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    overflow: hidden;
+  }
+
+  /* ── Chat (takes most of the screen) ── */
+  .chat-area {
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    min-height: 0;
+  }
+
+  .chat-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 0;
+  }
+  .chat-scroll::-webkit-scrollbar { width: 3px; }
+  .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: rgba(255,140,0,0.12); border-radius: 2px; }
+
+  /* Terminal-style messages */
+  .msg-block {
+    padding: 8px 0;
+  }
+  .msg-block + .msg-block {
+    border-top: 1px solid rgba(255,140,0,0.03);
+  }
+
+  .msg-prompt {
+    display: flex; align-items: baseline; gap: 8px;
+    margin-bottom: 4px;
+  }
+  .prompt-char {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+  .prompt-char.user { color: var(--glow-cyan); }
+  .prompt-char.clu { color: var(--glow-orange); }
+  .prompt-char.tool { color: var(--ok); }
+
+  .msg-content {
+    font-size: 13px; line-height: 1.7;
+    padding-left: 0;
+    color: var(--text);
+  }
+  .msg-content.user-text { color: var(--text-bright); }
+  .msg-content.clu-text { color: var(--text); }
+  .msg-content.tool-text {
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 4px 0 4px 12px;
+    border-left: 2px solid rgba(0,230,118,0.2);
+    margin: 4px 0;
+  }
+
+  .msg-content code {
+    background: rgba(255,140,0,0.06);
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 12px;
+    color: var(--glow-amber);
+  }
+
+  /* Thinking indicator */
+  .thinking {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 0;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .thinking-dots span {
+    display: inline-block;
+    width: 4px; height: 4px;
+    background: var(--glow-orange);
+    border-radius: 50%;
+    margin: 0 2px;
+    animation: dot-pulse 1.4s ease-in-out infinite;
+    opacity: 0.3;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-pulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(1); }
+    40% { opacity: 1; transform: scale(1.3); }
+  }
+
+  /* Chat input */
+  .chat-input-bar {
+    padding: 12px 24px 16px;
+    border-top: 1px solid var(--border);
+    background: rgba(8,9,14,0.95);
+  }
+  .input-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .input-prompt {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    color: var(--glow-cyan);
+    flex-shrink: 0;
+    letter-spacing: 1px;
+  }
+  .input-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-bright);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    outline: none;
+    caret-color: var(--glow-orange);
+  }
+  .input-field::placeholder { color: var(--text-dim); }
+  .input-hint {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 1px;
+    margin-top: 6px;
+  }
+  .input-hint kbd {
+    padding: 1px 5px;
+    border: 1px solid rgba(255,140,0,0.1);
+    border-radius: 2px;
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+
+  /* ── Right sidebar: dashboard panels ── */
+  .sidebar {
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+    background: rgba(6,7,12,0.98);
+  }
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,140,0,0.1); border-radius: 2px; }
+
+  .sb-section {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  .sb-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px; font-weight: 500;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--glow-orange);
+    margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sb-title .count {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* Gateway health ring */
+  .health-ring {
+    display: flex; align-items: center; gap: 16px;
+    padding: 4px 0;
+  }
+  .ring-svg { width: 56px; height: 56px; flex-shrink: 0; }
+  .ring-bg { fill: none; stroke: rgba(255,140,0,0.08); stroke-width: 5; }
+  .ring-fill { fill: none; stroke-width: 5; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; }
+  .ring-fill.ok { stroke: var(--ok); filter: drop-shadow(0 0 4px rgba(0,230,118,0.4)); }
+  .health-details { font-size: 11px; }
+  .health-details .hd-label { color: var(--text-dim); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  .health-details .hd-value { color: var(--text-bright); font-size: 14px; margin-top: 1px; }
+  .health-details .hd-sub { color: var(--text-dim); font-size: 10px; margin-top: 2px; }
+
+  /* Metric mini bars */
+  .mini-metrics {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-top: 8px;
+  }
+  .mm {
+    text-align: center;
+    padding: 6px;
+    background: rgba(255,140,0,0.02);
+    border: 1px solid rgba(255,140,0,0.04);
+    border-radius: 3px;
+  }
+  .mm-val {
+    font-size: 16px; font-weight: 500;
+    color: var(--text-bright);
+  }
+  .mm-val.glow-o { color: var(--glow-orange); text-shadow: 0 0 6px rgba(255,140,0,0.3); }
+  .mm-val.glow-c { color: var(--glow-cyan); text-shadow: 0 0 6px rgba(0,212,255,0.3); }
+  .mm-label { font-size: 8px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-top: 2px; }
+
+  /* Channel rows */
+  .sb-ch {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 0;
+    font-size: 11px;
+  }
+  .sb-ch-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .sb-ch-dot.on { background: var(--ok); box-shadow: 0 0 6px rgba(0,230,118,0.4); }
+  .sb-ch-dot.off { background: var(--text-dim); }
+  .sb-ch-name { flex: 1; color: var(--text); }
+  .sb-ch-info { color: var(--text-dim); font-size: 9px; }
+
+  /* Session rows */
+  .sb-sess {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 0;
+    font-size: 11px;
+  }
+  .sb-sess-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--glow-cyan);
+    box-shadow: 0 0 6px rgba(0,212,255,0.4);
+  }
+  .sb-sess-id { color: var(--glow-cyan); font-size: 10px; letter-spacing: 1px; width: 36px; }
+  .sb-sess-src { flex: 1; color: var(--text); }
+  .sb-sess-time { color: var(--text-dim); font-size: 9px; }
+
+  /* Cron rows */
+  .sb-cron {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 0;
+    font-size: 11px;
+  }
+  .sb-cron-icon { color: var(--glow-amber); font-size: 12px; }
+  .sb-cron-name { flex: 1; color: var(--text); }
+  .sb-cron-next { color: var(--text-dim); font-size: 9px; }
+  .sb-cron-status {
+    font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 1px 5px; border-radius: 2px;
+  }
+  .sb-cron-status.ok { color: var(--ok); border: 1px solid rgba(0,230,118,0.2); }
+
+  /* Quick actions */
+  .quick-actions {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  .qa-btn {
+    padding: 8px 6px;
+    text-align: center;
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid rgba(255,140,0,0.08);
+    border-radius: 3px;
+    background: rgba(255,140,0,0.02);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .qa-btn:hover {
+    color: var(--glow-orange);
+    border-color: rgba(255,140,0,0.25);
+    background: rgba(255,140,0,0.06);
+    box-shadow: 0 0 10px rgba(255,140,0,0.1);
+  }
+
+  /* ── Bottom status bar ── */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+    border-top: 1px solid var(--border);
+    background: rgba(8,9,14,0.98);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+  .sb-item { display: flex; align-items: center; gap: 5px; }
+  .sb-dot { width: 4px; height: 4px; border-radius: 50%; }
+  .sb-dot.ok { background: var(--ok); box-shadow: 0 0 4px var(--ok); }
+  .sb-flex { flex: 1; }
+  .sb-ver { opacity: 0.5; }
+
+  /* ── Cursor blink on input ── */
+  @keyframes cursor-blink {
+    0%, 50% { border-right-color: var(--glow-orange); }
+    51%, 100% { border-right-color: transparent; }
+  }
+  .input-field:focus {
+    /* border-right: 2px solid var(--glow-orange); animation: cursor-blink 1s step-end infinite; */
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ══ Top bar with tabs ══ -->
+  <div class="topbar">
+    <span class="tb-brand">OPENCLAW</span>
+    <div class="tb-sep"></div>
+    <div class="tb-tab active">Chat</div>
+    <div class="tb-tab">Overview</div>
+    <div class="tb-tab">Channels</div>
+    <div class="tb-tab">Config</div>
+    <div class="tb-tab">Logs</div>
+    <div class="tb-spacer"></div>
+    <div class="tb-status"><div class="tb-dot"></div> Connected</div>
+    <div class="tb-sep"></div>
+    <span class="tb-model">CLU:LATEST</span>
+    <span id="clock" style="font-size:10px;letter-spacing:2px;color:var(--text-dim)">00:00</span>
+  </div>
+
+  <!-- ══ Main split ══ -->
+  <div class="main">
+    <!-- Chat area -->
+    <div class="chat-area">
+      <div class="chat-scroll">
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char user">USER ›</span>
+          </div>
+          <div class="msg-content user-text">What's the current status of all channels?</div>
+        </div>
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char tool">TOOL ›</span>
+            <span style="color:var(--ok);font-size:10px;letter-spacing:1px">channels.status</span>
+          </div>
+          <div class="msg-content tool-text">
+            discord: connected (3 guilds, last_msg: 2m ago)<br>
+            telegram: connected (12 chats, last_msg: 5m ago)<br>
+            imessage: disconnected<br>
+            nostr: connected (2 relays)
+          </div>
+        </div>
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char clu">CLU ›</span>
+          </div>
+          <div class="msg-content clu-text">
+            Channel diagnostics complete. Three of four channels operating within normal parameters.
+            <br><br>
+            <strong style="color:var(--ok)">Discord</strong> — Fully operational across 3 guilds. Last transmission: 2 minutes ago.<br>
+            <strong style="color:var(--ok)">Telegram</strong> — Active on 12 chat interfaces. Message flow nominal.<br>
+            <strong style="color:var(--danger)">iMessage</strong> — Offline. Bridge connection severed. Requires re-authentication.<br>
+            <strong style="color:var(--ok)">Nostr</strong> — Connected to 2 relays. Broadcasting normally.
+            <br><br>
+            The iMessage bridge requires your attention. Shall I attempt reconnection, or would you prefer to handle it through the Channels configuration?
+          </div>
+        </div>
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char user">USER ›</span>
+          </div>
+          <div class="msg-content user-text">Try reconnecting iMessage</div>
+        </div>
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char tool">TOOL ›</span>
+            <span style="color:var(--ok);font-size:10px;letter-spacing:1px">channels.reconnect</span>
+          </div>
+          <div class="msg-content tool-text">
+            imessage: reconnection initiated... authentication required (QR code pending)
+          </div>
+        </div>
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char clu">CLU ›</span>
+          </div>
+          <div class="msg-content clu-text">
+            The iMessage bridge is requesting re-authentication. A QR code has been generated — you'll find it in the <code>Channels → iMessage</code> configuration panel. Scan it with your device to restore the connection.
+            <br><br>
+            I'll monitor the handshake and confirm once the link is established. The Grid must be complete.
+          </div>
+        </div>
+
+        <div class="msg-block">
+          <div class="msg-prompt">
+            <span class="prompt-char user">USER ›</span>
+          </div>
+          <div class="msg-content user-text">How many messages have been processed today?</div>
+        </div>
+
+        <div class="thinking">
+          <span class="thinking-dots"><span></span><span></span><span></span></span>
+          <span>CLU is processing...</span>
+        </div>
+      </div>
+
+      <div class="chat-input-bar">
+        <div class="input-row">
+          <span class="input-prompt">›</span>
+          <input type="text" class="input-field" placeholder="Talk to CLU..." autofocus>
+        </div>
+        <div class="input-hint">
+          <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> newline · <kbd>⌘K</kbd> clear · <kbd>⌘⇧O</kbd> toggle window
+        </div>
+      </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="sidebar">
+      <!-- Health -->
+      <div class="sb-section">
+        <div class="sb-title">Gateway</div>
+        <div class="health-ring">
+          <svg class="ring-svg" viewBox="0 0 56 56">
+            <circle class="ring-bg" cx="28" cy="28" r="22"/>
+            <circle class="ring-fill ok" cx="28" cy="28" r="22"
+              stroke-dasharray="138.23"
+              stroke-dashoffset="2.76"/>
+          </svg>
+          <div class="health-details">
+            <div class="hd-label">Status</div>
+            <div class="hd-value" style="color:var(--ok)">ONLINE</div>
+            <div class="hd-sub">Uptime: 4h 23m</div>
+          </div>
+        </div>
+        <div class="mini-metrics">
+          <div class="mm"><div class="mm-val glow-o">847</div><div class="mm-label">API Calls</div></div>
+          <div class="mm"><div class="mm-val glow-c">3</div><div class="mm-label">Sessions</div></div>
+          <div class="mm"><div class="mm-val">1.2s</div><div class="mm-label">Avg Latency</div></div>
+          <div class="mm"><div class="mm-val" style="color:var(--ok)">99.8%</div><div class="mm-label">Success</div></div>
+        </div>
+      </div>
+
+      <!-- Channels -->
+      <div class="sb-section">
+        <div class="sb-title">Channels <span class="count">3/4</span></div>
+        <div class="sb-ch"><div class="sb-ch-dot on"></div><span class="sb-ch-name">Discord</span><span class="sb-ch-info">3 guilds</span></div>
+        <div class="sb-ch"><div class="sb-ch-dot on"></div><span class="sb-ch-name">Telegram</span><span class="sb-ch-info">12 chats</span></div>
+        <div class="sb-ch"><div class="sb-ch-dot off"></div><span class="sb-ch-name">iMessage</span><span class="sb-ch-info">auth pending</span></div>
+        <div class="sb-ch"><div class="sb-ch-dot on"></div><span class="sb-ch-name">Nostr</span><span class="sb-ch-info">2 relays</span></div>
+      </div>
+
+      <!-- Sessions -->
+      <div class="sb-section">
+        <div class="sb-title">Sessions <span class="count">3</span></div>
+        <div class="sb-sess"><div class="sb-sess-dot"></div><span class="sb-sess-id">7A3F</span><span class="sb-sess-src">Control UI</span><span class="sb-sess-time">now</span></div>
+        <div class="sb-sess"><div class="sb-sess-dot"></div><span class="sb-sess-id">B2C1</span><span class="sb-sess-src">Discord</span><span class="sb-sess-time">2m</span></div>
+        <div class="sb-sess"><div class="sb-sess-dot"></div><span class="sb-sess-id">E9D4</span><span class="sb-sess-src">Telegram</span><span class="sb-sess-time">5m</span></div>
+      </div>
+
+      <!-- Cron -->
+      <div class="sb-section">
+        <div class="sb-title">Cron Jobs</div>
+        <div class="sb-cron"><span class="sb-cron-icon">⏱</span><span class="sb-cron-name">daily-summary</span><span class="sb-cron-status ok">OK</span><span class="sb-cron-next">in 18h</span></div>
+        <div class="sb-cron"><span class="sb-cron-icon">⏱</span><span class="sb-cron-name">health-check</span><span class="sb-cron-status ok">OK</span><span class="sb-cron-next">in 52m</span></div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="sb-section">
+        <div class="sb-title">Quick Actions</div>
+        <div class="quick-actions">
+          <div class="qa-btn">Reload Config</div>
+          <div class="qa-btn">Clear Chat</div>
+          <div class="qa-btn">Run Health</div>
+          <div class="qa-btn">View Logs</div>
+          <div class="qa-btn">New Session</div>
+          <div class="qa-btn">Export Chat</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Bottom status ══ -->
+  <div class="statusbar">
+    <div class="sb-item"><div class="sb-dot ok"></div>Gateway :18789</div>
+    <div class="sb-item"><div class="sb-dot ok"></div>Ollama :11434</div>
+    <div class="sb-item">clu:latest (Q8_0 · 8.5GB)</div>
+    <div class="sb-flex"></div>
+    <span class="sb-ver">OpenClaw 2026.1.30</span>
+  </div>
+</div>
+
+<script>
+  function updateClock() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById('clock').textContent = `${h}:${m}`;
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+</script>
+</body>
+</html>

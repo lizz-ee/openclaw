@@ -7,15 +7,15 @@ type PollingHost = {
   nodesPollInterval: number | null;
   logsPollInterval: number | null;
   debugPollInterval: number | null;
-  tab: string;
+  canvasCards: Record<string, { open?: boolean }>;
 };
 
 export function startNodesPolling(host: PollingHost) {
   if (host.nodesPollInterval != null) return;
-  host.nodesPollInterval = window.setInterval(
-    () => void loadNodes(host as unknown as OpenClawApp, { quiet: true }),
-    5000,
-  );
+  host.nodesPollInterval = window.setInterval(() => {
+    if (!host.canvasCards?.nodes?.open) return;
+    void loadNodes(host as unknown as OpenClawApp, { quiet: true });
+  }, 5000);
 }
 
 export function stopNodesPolling(host: PollingHost) {
@@ -27,7 +27,7 @@ export function stopNodesPolling(host: PollingHost) {
 export function startLogsPolling(host: PollingHost) {
   if (host.logsPollInterval != null) return;
   host.logsPollInterval = window.setInterval(() => {
-    if (host.tab !== "logs") return;
+    if (!host.canvasCards?.log?.open) return;
     void loadLogs(host as unknown as OpenClawApp, { quiet: true });
   }, 2000);
 }
@@ -41,7 +41,7 @@ export function stopLogsPolling(host: PollingHost) {
 export function startDebugPolling(host: PollingHost) {
   if (host.debugPollInterval != null) return;
   host.debugPollInterval = window.setInterval(() => {
-    if (host.tab !== "debug") return;
+    if (!host.canvasCards?.debug?.open) return;
     void loadDebug(host as unknown as OpenClawApp);
   }, 3000);
 }

@@ -146,6 +146,7 @@ async function resolveContextReport(
     reasoningTagHint: false,
     toolNames,
     toolSummaries,
+    skipToolSummaries: toolNames.length > 0,
     modelAliasLines: [],
     userTimezone,
     userTime,

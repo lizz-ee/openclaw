@@ -28,7 +28,6 @@ function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
     toolMessages: [],
     stream: null,
     streamStartedAt: null,
-    assistantAvatarUrl: null,
     draft: "",
     queue: [],
     connected: true,
@@ -37,8 +36,6 @@ function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
     error: null,
     sessions: createSessions(),
     focusMode: false,
-    assistantName: "OpenClaw",
-    assistantAvatar: null,
     onRefresh: () => undefined,
     onToggleFocusMode: () => undefined,
     onDraftChange: () => undefined,
@@ -50,7 +47,7 @@ function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
 }
 
 describe("chat view", () => {
-  it("shows a stop button when aborting is available", () => {
+  it("shows a stop button in compose bar when aborting is available", () => {
     const container = document.createElement("div");
     const onAbort = vi.fn();
     render(
@@ -69,10 +66,9 @@ describe("chat view", () => {
     expect(stopButton).not.toBeUndefined();
     stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onAbort).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("New session");
   });
 
-  it("shows a new session button when aborting is unavailable", () => {
+  it("shows new session button in session switcher area", () => {
     const container = document.createElement("div");
     const onNewSession = vi.fn();
     render(
@@ -91,6 +87,18 @@ describe("chat view", () => {
     expect(newSessionButton).not.toBeUndefined();
     newSessionButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onNewSession).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Stop");
+  });
+
+  it("does not show stop button when canAbort is false", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(createProps({ canAbort: false })),
+      container,
+    );
+
+    const stopButton = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent?.trim() === "Stop",
+    );
+    expect(stopButton).toBeUndefined();
   });
 });

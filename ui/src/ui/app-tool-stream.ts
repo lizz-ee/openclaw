@@ -206,9 +206,9 @@ export function handleAgentEvent(host: ToolStreamHost, payload?: AgentEventPaylo
   const args = phase === "start" ? data.args : undefined;
   const output =
     phase === "update"
-      ? formatToolOutput(data.partialResult)
+      ? (formatToolOutput(data.partialResult) ?? undefined)
       : phase === "result"
-        ? formatToolOutput(data.result)
+        ? (formatToolOutput(data.result) ?? undefined)
         : undefined;
 
   const now = Date.now();

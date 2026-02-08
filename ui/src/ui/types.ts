@@ -310,6 +310,8 @@ export type PresenceEntry = {
   deviceFamily?: string | null;
   modelIdentifier?: string | null;
   mode?: string | null;
+  roles?: string[];
+  scopes?: string[];
   lastInputSeconds?: number | null;
   reason?: string | null;
   text?: string | null;

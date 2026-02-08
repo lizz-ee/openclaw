@@ -38,6 +38,22 @@ export async function loadDebug(state: DebugState) {
   }
 }
 
+export type UsageState = {
+  client: GatewayBrowserClient | null;
+  connected: boolean;
+  usageSummary: unknown | null;
+};
+
+export async function loadUsage(state: UsageState) {
+  if (!state.client || !state.connected) return;
+  try {
+    const result = await state.client.request("usage.cost", { days: 7 });
+    state.usageSummary = result;
+  } catch {
+    // usage.cost may not be available on all gateways — silently skip
+  }
+}
+
 export async function callDebugMethod(state: DebugState) {
   if (!state.client || !state.connected) return;
   state.debugCallError = null;

@@ -4,9 +4,6 @@ import { generateUUID } from "./uuid";
 import { resetToolStream } from "./app-tool-stream";
 import { scheduleChatScroll } from "./app-scroll";
 import { setLastActiveSessionKey } from "./app-settings";
-import { normalizeBasePath } from "./navigation";
-import type { GatewayHelloOk } from "./gateway";
-import { parseAgentSessionKey } from "../../../src/sessions/session-key-utils.js";
 import type { OpenClawApp } from "./app";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types";
 
@@ -19,8 +16,6 @@ type ChatHost = {
   chatSending: boolean;
   sessionKey: string;
   basePath: string;
-  hello: GatewayHelloOk | null;
-  chatAvatarUrl: string | null;
   refreshSessionsAfterChat: Set<string>;
 };
 
@@ -188,55 +183,8 @@ export async function refreshChat(host: ChatHost) {
     loadSessions(host as unknown as OpenClawApp, {
       activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
     }),
-    refreshChatAvatar(host),
   ]);
   scheduleChatScroll(host as unknown as Parameters<typeof scheduleChatScroll>[0], true);
 }
 
 export const flushChatQueueForEvent = flushChatQueue;
-
-type SessionDefaultsSnapshot = {
-  defaultAgentId?: string;
-};
-
-function resolveAgentIdForSession(host: ChatHost): string | null {
-  const parsed = parseAgentSessionKey(host.sessionKey);
-  if (parsed?.agentId) return parsed.agentId;
-  const snapshot = host.hello?.snapshot as
-    | { sessionDefaults?: SessionDefaultsSnapshot }
-    | undefined;
-  const fallback = snapshot?.sessionDefaults?.defaultAgentId?.trim();
-  return fallback || "main";
-}
-
-function buildAvatarMetaUrl(basePath: string, agentId: string): string {
-  const base = normalizeBasePath(basePath);
-  const encoded = encodeURIComponent(agentId);
-  return base ? `${base}/avatar/${encoded}?meta=1` : `/avatar/${encoded}?meta=1`;
-}
-
-export async function refreshChatAvatar(host: ChatHost) {
-  if (!host.connected) {
-    host.chatAvatarUrl = null;
-    return;
-  }
-  const agentId = resolveAgentIdForSession(host);
-  if (!agentId) {
-    host.chatAvatarUrl = null;
-    return;
-  }
-  host.chatAvatarUrl = null;
-  const url = buildAvatarMetaUrl(host.basePath, agentId);
-  try {
-    const res = await fetch(url, { method: "GET" });
-    if (!res.ok) {
-      host.chatAvatarUrl = null;
-      return;
-    }
-    const data = (await res.json()) as { avatarUrl?: unknown };
-    const avatarUrl = typeof data.avatarUrl === "string" ? data.avatarUrl.trim() : "";
-    host.chatAvatarUrl = avatarUrl || null;
-  } catch {
-    host.chatAvatarUrl = null;
-  }
-}

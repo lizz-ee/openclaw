@@ -3,10 +3,12 @@ import { customElement, state } from "lit/decorators.js";
 
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity";
-import { loadSettings, type UiSettings } from "./storage";
-import { renderApp } from "./app-render";
+import { loadSettings, saveSettings, type UiSettings } from "./storage";
+import { renderCanvas, DOCK_GROUPS } from "./canvas/canvas-render";
+import { toggleCard, openCard, focusCard, type CanvasHost } from "./canvas/canvas-interactions";
 import type { Tab } from "./navigation";
-import type { ResolvedTheme, ThemeMode } from "./theme";
+import type { ThemeName } from "./theme";
+import { type CardId, type CardState, type CanvasInteraction, type SavedWorkspace, getDefaultCardStates } from "./canvas/canvas-types";
 import type {
   AgentsListResult,
   ConfigSnapshot,
@@ -30,6 +32,7 @@ import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals";
 import type { DevicePairingList } from "./controllers/devices";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
+import type { SkillMessage } from "./controllers/skills";
 import {
   resetToolStream as resetToolStreamInternal,
   type ToolStreamEntry,
@@ -50,8 +53,6 @@ import {
 import {
   applySettings as applySettingsInternal,
   loadCron as loadCronInternal,
-  loadOverview as loadOverviewInternal,
-  setTab as setTabInternal,
   setTheme as setThemeInternal,
   onPopState as onPopStateInternal,
 } from "./app-settings";
@@ -75,6 +76,23 @@ import {
 } from "./app-channels";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity";
+import { loadDebug as loadDebugInternal, loadUsage as loadUsageInternal } from "./controllers/debug";
+import {
+  loadTtsStatus as loadTtsStatusInternal,
+  loadTtsProviders as loadTtsProvidersInternal,
+  toggleTts as toggleTtsInternal,
+  setTtsProvider as setTtsProviderInternal,
+  type TtsStatusResult,
+  type TtsProviderEntry,
+} from "./controllers/tts";
+import { loadLogs as loadLogsInternal } from "./controllers/logs";
+import { loadSessions as loadSessionsInternal } from "./controllers/sessions";
+import { loadSkills as loadSkillsInternal } from "./controllers/skills";
+import { loadPresence as loadPresenceInternal } from "./controllers/presence";
+import { loadNodes as loadNodesInternal } from "./controllers/nodes";
+import { loadChatHistory as loadChatHistoryInternal } from "./controllers/chat";
+import { loadConfig as loadConfigInternal } from "./controllers/config";
+import { loadLinkedModels as loadLinkedModelsInternal, type ModelEntry } from "./controllers/models";
 
 declare global {
   interface Window {
@@ -100,14 +118,36 @@ export class OpenClawApp extends LitElement {
   @state() tab: Tab = "chat";
   @state() onboarding = resolveOnboardingMode();
   @state() connected = false;
-  @state() theme: ThemeMode = this.settings.theme ?? "system";
-  @state() themeResolved: ResolvedTheme = "dark";
+  @state() theme: ThemeName = (this.settings.theme as ThemeName) ?? "grid";
+  @state() themeResolved = "grid";
   @state() hello: GatewayHelloOk | null = null;
   @state() lastError: string | null = null;
   @state() eventLog: EventLogEntry[] = [];
   private eventLogBuffer: EventLogEntry[] = [];
   private toolStreamSyncTimer: number | null = null;
   private sidebarCloseTimer: number | null = null;
+
+  // Canvas state
+  @state() canvasPanX = -1600;
+  @state() canvasPanY = -600;
+  @state() canvasScale = 1;
+  @state() canvasInteraction: CanvasInteraction = "idle";
+  @state() canvasCards: Record<CardId, CardState> = this.settings.canvasCards as Record<CardId, CardState> ?? getDefaultCardStates();
+  @state() canvasFocusedCard: CardId | null = null;
+  @state() canvasNextZ = 100;
+  @state() hudClockTime = Date.now();
+  @state() availableModels: ModelEntry[] = [];
+  @state() quickModels: string[] = [];
+  @state() modelPickerOpen = false;
+  @state() quickPickerOpen = false;
+  @state() activeModel: string | null = null;
+  @state() ollamaOk: boolean | null = null;
+  @state() lmstudioOk: boolean | null = null;
+  @state() workspaces: SavedWorkspace[] = this.settings.workspaces ?? [];
+  @state() activeWorkspaceId: string | null = null;
+  @state() workspaceNaming = false;
+  @state() workspaceNameDraft = "";
+  private clockInterval: number | null = null;
 
   @state() assistantName = injectedAssistantIdentity.name;
   @state() assistantAvatar = injectedAssistantIdentity.avatar;
@@ -123,7 +163,6 @@ export class OpenClawApp extends LitElement {
   @state() chatStreamStartedAt: number | null = null;
   @state() chatRunId: string | null = null;
   @state() compactionStatus: import("./app-tool-stream").CompactionStatus | null = null;
-  @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
@@ -131,7 +170,7 @@ export class OpenClawApp extends LitElement {
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
   @state() sidebarError: string | null = null;
-  @state() splitRatio = this.settings.splitRatio;
+  @state() splitRatio = 0.55;
 
   @state() nodesLoading = false;
   @state() nodes: Array<Record<string, unknown>> = [];
@@ -227,6 +266,12 @@ export class OpenClawApp extends LitElement {
   @state() debugCallParams = "{}";
   @state() debugCallResult: string | null = null;
   @state() debugCallError: string | null = null;
+  @state() usageSummary: unknown | null = null;
+  @state() toasts: import("./app-view-state").ToastEntry[] = [];
+  private toastCounter = 0;
+  @state() ttsStatus: TtsStatusResult | null = null;
+  @state() ttsProviders: TtsProviderEntry[] = [];
+  @state() ttsBusy = false;
 
   @state() logsLoading = false;
   @state() logsError: string | null = null;
@@ -252,6 +297,7 @@ export class OpenClawApp extends LitElement {
   private nodesPollInterval: number | null = null;
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
+  private localDiscoveryInterval: number | null = null;
   private logsScrollFrame: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
@@ -259,9 +305,8 @@ export class OpenClawApp extends LitElement {
   basePath = "";
   private popStateHandler = () =>
     onPopStateInternal(this as unknown as Parameters<typeof onPopStateInternal>[0]);
-  private themeMedia: MediaQueryList | null = null;
-  private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null = null;
   private topbarObserver: ResizeObserver | null = null;
+  private _boundKeydown = this._handleGlobalKeydown.bind(this);
 
   createRenderRoot() {
     return this;
@@ -270,6 +315,16 @@ export class OpenClawApp extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     handleConnected(this as unknown as Parameters<typeof handleConnected>[0]);
+    this.clockInterval = window.setInterval(() => {
+      this.hudClockTime = Date.now();
+    }, 1000);
+    // Re-probe Ollama + LM Studio every 15s so dots update live
+    this.localDiscoveryInterval = window.setInterval(() => {
+      if (this.connected) {
+        void loadLinkedModelsInternal(this as unknown as Parameters<typeof loadLinkedModelsInternal>[0]);
+      }
+    }, 15_000);
+    document.addEventListener("keydown", this._boundKeydown);
   }
 
   protected firstUpdated() {
@@ -277,6 +332,15 @@ export class OpenClawApp extends LitElement {
   }
 
   disconnectedCallback() {
+    document.removeEventListener("keydown", this._boundKeydown);
+    if (this.clockInterval != null) {
+      clearInterval(this.clockInterval);
+      this.clockInterval = null;
+    }
+    if (this.localDiscoveryInterval != null) {
+      clearInterval(this.localDiscoveryInterval);
+      this.localDiscoveryInterval = null;
+    }
     handleDisconnected(this as unknown as Parameters<typeof handleDisconnected>[0]);
     super.disconnectedCallback();
   }
@@ -323,16 +387,8 @@ export class OpenClawApp extends LitElement {
     applySettingsInternal(this as unknown as Parameters<typeof applySettingsInternal>[0], next);
   }
 
-  setTab(next: Tab) {
-    setTabInternal(this as unknown as Parameters<typeof setTabInternal>[0], next);
-  }
-
-  setTheme(next: ThemeMode, context?: Parameters<typeof setThemeInternal>[2]) {
+  setTheme(next: ThemeName, context?: Parameters<typeof setThemeInternal>[2]) {
     setThemeInternal(this as unknown as Parameters<typeof setThemeInternal>[0], next, context);
-  }
-
-  async loadOverview() {
-    await loadOverviewInternal(this as unknown as Parameters<typeof loadOverviewInternal>[0]);
   }
 
   async loadCron() {
@@ -464,12 +520,122 @@ export class OpenClawApp extends LitElement {
   }
 
   handleSplitRatioChange(ratio: number) {
-    const newRatio = Math.max(0.4, Math.min(0.7, ratio));
-    this.splitRatio = newRatio;
-    this.applySettings({ ...this.settings, splitRatio: newRatio });
+    this.splitRatio = Math.max(0.4, Math.min(0.7, ratio));
+  }
+
+  pushToast(severity: import("./app-view-state").ToastEntry["severity"], title: string, message: string) {
+    const id = `toast-${++this.toastCounter}-${Date.now()}`;
+    const entry: import("./app-view-state").ToastEntry = { id, ts: Date.now(), severity, title, message };
+    this.toasts = [entry, ...this.toasts].slice(0, 8);
+    window.setTimeout(() => this.dismissToast(id), 5000);
+  }
+
+  dismissToast(id: string) {
+    this.toasts = this.toasts.filter((t) => t.id !== id);
+  }
+
+  async handleTtsToggle(enabled: boolean) {
+    await toggleTtsInternal(this as unknown as Parameters<typeof toggleTtsInternal>[0], enabled);
+  }
+
+  async handleTtsSetProvider(provider: string) {
+    await setTtsProviderInternal(this as unknown as Parameters<typeof setTtsProviderInternal>[0], provider);
+  }
+
+  saveCanvasState() {
+    this.applySettings({
+      ...this.settings,
+      canvasCards: { ...this.canvasCards },
+    });
+  }
+
+  onCardOpen(cardId: string) {
+    switch (cardId) {
+      case "chat":
+        loadChatHistoryInternal(this as unknown as Parameters<typeof loadChatHistoryInternal>[0]);
+        loadSessionsInternal(this as unknown as Parameters<typeof loadSessionsInternal>[0]);
+        break;
+      case "system":
+        loadDebugInternal(this as unknown as Parameters<typeof loadDebugInternal>[0]);
+        loadUsageInternal(this as unknown as Parameters<typeof loadUsageInternal>[0]);
+        loadTtsStatusInternal(this as unknown as Parameters<typeof loadTtsStatusInternal>[0]);
+        loadTtsProvidersInternal(this as unknown as Parameters<typeof loadTtsProvidersInternal>[0]);
+        break;
+      case "debug":
+        loadDebugInternal(this as unknown as Parameters<typeof loadDebugInternal>[0]);
+        break;
+      case "channels":
+        this.handleChannelConfigReload();
+        break;
+      case "sessions":
+        loadSessionsInternal(this as unknown as Parameters<typeof loadSessionsInternal>[0]);
+        break;
+      case "activity":
+        this.eventLog = this.eventLogBuffer;
+        break;
+      case "log":
+        loadLogsInternal(this as unknown as Parameters<typeof loadLogsInternal>[0]);
+        break;
+      case "skills":
+        loadSkillsInternal(this as unknown as Parameters<typeof loadSkillsInternal>[0]);
+        break;
+      case "cron":
+        this.loadCron();
+        break;
+      case "config":
+        loadConfigInternal(this as unknown as Parameters<typeof loadConfigInternal>[0]);
+        break;
+      case "nodes":
+        loadPresenceInternal(this as unknown as Parameters<typeof loadPresenceInternal>[0]);
+        loadNodesInternal(this as unknown as Parameters<typeof loadNodesInternal>[0]);
+        break;
+    }
+  }
+
+  private _handleGlobalKeydown(e: KeyboardEvent) {
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if ((e.target as HTMLElement)?.isContentEditable) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const host = this as unknown as CanvasHost;
+
+    // 1-9: toggle dock cards
+    const digit = parseInt(e.key, 10);
+    if (digit >= 1 && digit <= 9) {
+      const flatCards = DOCK_GROUPS.flatMap((g) => g.cards);
+      const cardId = flatCards[digit - 1];
+      if (cardId) {
+        e.preventDefault();
+        toggleCard(host, cardId as CardId);
+      }
+      return;
+    }
+
+    // /: focus chat input
+    if (e.key === "/") {
+      e.preventDefault();
+      if (!this.canvasCards.chat?.open) {
+        openCard(host, "chat" as CardId);
+      } else {
+        focusCard(host, "chat" as CardId);
+      }
+      requestAnimationFrame(() => {
+        const textarea = document.querySelector(".card-body--chat textarea") as HTMLTextAreaElement | null;
+        textarea?.focus();
+      });
+      return;
+    }
+
+    // Escape: close focused card
+    if (e.key === "Escape" && this.canvasFocusedCard) {
+      e.preventDefault();
+      toggleCard(host, this.canvasFocusedCard);
+      return;
+    }
   }
 
   render() {
-    return renderApp(this);
+    return renderCanvas(this as unknown as Parameters<typeof renderCanvas>[0]);
   }
 }

@@ -5,8 +5,7 @@ import { loadAgents } from "./controllers/agents";
 import type { GatewayEventFrame, GatewayHelloOk } from "./gateway";
 import { GatewayBrowserClient } from "./gateway";
 import type { EventLogEntry } from "./app-events";
-import type { AgentsListResult, PresenceEntry, HealthSnapshot, StatusSummary } from "./types";
-import type { Tab } from "./navigation";
+import type { AgentsListResult, PresenceEntry, HealthSnapshot } from "./types";
 import type { UiSettings } from "./storage";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream";
 import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat";
@@ -21,6 +20,7 @@ import {
 import type { OpenClawApp } from "./app";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
 import { loadAssistantIdentity } from "./controllers/assistant-identity";
+import { loadModels, initActiveModel, loadLinkedModels } from "./controllers/models";
 import { loadSessions } from "./controllers/sessions";
 
 type GatewayHost = {
@@ -33,10 +33,10 @@ type GatewayHost = {
   onboarding?: boolean;
   eventLogBuffer: EventLogEntry[];
   eventLog: EventLogEntry[];
-  tab: Tab;
+  canvasCards?: Record<string, { open?: boolean }>;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
-  presenceStatus: StatusSummary | null;
+  presenceStatus: string | null;
   agentsLoading: boolean;
   agentsList: AgentsListResult | null;
   agentsError: string | null;
@@ -47,8 +47,11 @@ type GatewayHost = {
   sessionKey: string;
   chatRunId: string | null;
   refreshSessionsAfterChat: Set<string>;
+  availableModels: unknown[];
+  activeModel: string | null;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
+  pushToast: (severity: "info" | "warn" | "error" | "ok", title: string, message: string) => void;
 };
 
 type SessionDefaultsSnapshot = {
@@ -131,6 +134,9 @@ export function connectGateway(host: GatewayHost) {
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
       void loadAssistantIdentity(host as unknown as OpenClawApp);
       void loadAgents(host as unknown as OpenClawApp);
+      void loadModels(host as unknown as Parameters<typeof loadModels>[0]);
+      void initActiveModel(host as unknown as Parameters<typeof initActiveModel>[0]);
+      void loadLinkedModels(host as unknown as Parameters<typeof loadLinkedModels>[0]);
       void loadNodes(host as unknown as OpenClawApp, { quiet: true });
       void loadDevices(host as unknown as OpenClawApp, { quiet: true });
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
@@ -163,7 +169,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     { ts: Date.now(), event: evt.event, payload: evt.payload },
     ...host.eventLogBuffer,
   ].slice(0, 250);
-  if (host.tab === "debug") {
+  if (host.canvasCards?.debug?.open || host.canvasCards?.system?.open || host.canvasCards?.activity?.open) {
     host.eventLog = host.eventLogBuffer;
   }
 
@@ -212,8 +218,14 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     return;
   }
 
-  if (evt.event === "cron" && host.tab === "cron") {
-    void loadCron(host as unknown as Parameters<typeof loadCron>[0]);
+  if (evt.event === "cron") {
+    if (host.canvasCards?.cron?.open) {
+      void loadCron(host as unknown as Parameters<typeof loadCron>[0]);
+    }
+    const cp = evt.payload as { status?: string; jobId?: string; name?: string; error?: string } | undefined;
+    if (cp?.status === "error") {
+      host.pushToast("error", "Cron Failed", cp.name ?? cp.jobId ?? "unknown job");
+    }
   }
 
   if (evt.event === "device.pair.requested" || evt.event === "device.pair.resolved") {
@@ -229,6 +241,8 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       window.setTimeout(() => {
         host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, entry.id);
       }, delay);
+      const cmd = entry.request.command || "command";
+      host.pushToast("warn", "Approval Needed", cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd);
     }
     return;
   }
@@ -237,7 +251,9 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     const resolved = parseExecApprovalResolved(evt.payload);
     if (resolved) {
       host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, resolved.id);
+      host.execApprovalError = null;
     }
+    return;
   }
 }
 

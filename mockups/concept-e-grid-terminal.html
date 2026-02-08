@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — The Grid Terminal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --cyan: #00e8d0;
+    --cyan-bright: #40fff0;
+    --cyan-mid: #00b0a0;
+    --cyan-dim: #005e54;
+    --cyan-ghost: rgba(0, 232, 208, 0.03);
+    --cyan-border: rgba(0, 232, 208, 0.18);
+    --cyan-glow: rgba(0, 232, 208, 0.5);
+    --orange: #ff9500;
+    --orange-bright: #ffbb55;
+    --orange-dim: rgba(255, 149, 0, 0.12);
+    --orange-glow: rgba(255, 149, 0, 0.45);
+    --green: #00ff88;
+    --green-dim: rgba(0, 255, 136, 0.12);
+    --red: #ff3355;
+    --red-dim: rgba(255, 51, 85, 0.15);
+    --bg: #000000;
+    --panel: rgba(0, 0, 0, 0.85);
+    --panel-hover: rgba(0, 232, 208, 0.03);
+    --text: #00e8d0;
+    --text-dim: #005e54;
+    --text-bright: #c0fff6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ═══════════════════════════════════
+     CRT EFFECTS
+     ═══════════════════════════════════ */
+  .crt-scanlines {
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.12) 1px,
+      rgba(0, 0, 0, 0.12) 2px
+    );
+  }
+  .crt-vignette {
+    position: fixed; inset: 0; z-index: 9998;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse at center,
+      transparent 50%,
+      rgba(0, 0, 0, 0.45) 78%,
+      rgba(0, 0, 0, 0.8) 100%
+    );
+  }
+  .crt-glow {
+    position: fixed; inset: 0; z-index: 9997;
+    pointer-events: none;
+    box-shadow: inset 0 0 120px rgba(0, 232, 208, 0.015);
+  }
+
+  /* ═══════════════════════════════════
+     GRID BACKGROUND
+     ═══════════════════════════════════ */
+  .grid-bg {
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      linear-gradient(rgba(0,232,208,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,232,208,0.018) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* ═══════════════════════════════════
+     GMUNK GEOMETRY (background SVG)
+     ═══════════════════════════════════ */
+  .geo-layer {
+    position: fixed; inset: 0; z-index: 0;
+    pointer-events: none;
+  }
+  .geo-layer svg { width: 100%; height: 100%; }
+  .gl { stroke: rgba(0,232,208,0.05); stroke-width: 0.5; fill: none; }
+  .glb { stroke: rgba(0,232,208,0.09); stroke-width: 0.5; fill: none; }
+  .gd { fill: rgba(0,232,208,0.12); }
+  .gr { stroke: rgba(0,232,208,0.03); stroke-width: 0.5; fill: none; }
+
+  /* Slow rotating ring */
+  .ring-deco {
+    position: fixed; z-index: 0; pointer-events: none;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    animation: ring-spin 180s linear infinite;
+  }
+  @keyframes ring-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+  /* ═══════════════════════════════════
+     MAIN LAYOUT (Concept A structure)
+     ═══════════════════════════════════ */
+  .shell {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-rows: 42px 1fr 26px;
+    height: 100vh;
+  }
+
+  /* ─── Top bar ─── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--cyan-border);
+    background: rgba(0,0,0,0.92);
+    gap: 14px;
+    position: relative;
+  }
+  /* Top bar glow line */
+  .topbar::after {
+    content: '';
+    position: absolute; bottom: -1px; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-glow), transparent);
+    opacity: 0.3;
+  }
+
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .brand-ring {
+    width: 26px; height: 26px;
+    border: 1.5px solid var(--cyan);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 12px rgba(0,232,208,0.25), inset 0 0 6px rgba(0,232,208,0.1);
+    animation: brand-breathe 4s ease-in-out infinite;
+    position: relative;
+  }
+  .brand-ring::after {
+    content: '';
+    position: absolute; inset: -4px;
+    border: 1px solid rgba(0,232,208,0.08);
+    border-radius: 50%;
+  }
+  @keyframes brand-breathe {
+    0%, 100% { box-shadow: 0 0 12px rgba(0,232,208,0.25), inset 0 0 6px rgba(0,232,208,0.1); }
+    50% { box-shadow: 0 0 20px rgba(0,232,208,0.4), inset 0 0 10px rgba(0,232,208,0.15); }
+  }
+  .brand-ring svg { width: 12px; height: 12px; stroke: var(--cyan); fill: none; stroke-width: 2; }
+  .brand-name {
+    font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan-glow);
+  }
+
+  .topbar-sep { width: 1px; height: 18px; background: var(--cyan-border); }
+
+  .topbar-status {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .ts-item {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .ts-dot { width: 5px; height: 5px; }
+  .ts-dot.ok { background: var(--green); box-shadow: 0 0 6px rgba(0,255,136,0.5); }
+  .ts-dot.warn { background: var(--orange); box-shadow: 0 0 6px var(--orange-glow); }
+  .ts-dot.off { background: var(--red); box-shadow: 0 0 4px rgba(255,51,85,0.3); opacity: 0.7; }
+
+  .topbar-spacer { flex: 1; }
+
+  .model-tag {
+    font-size: 10px; letter-spacing: 2px;
+    color: var(--orange);
+    text-shadow: 0 0 8px var(--orange-glow);
+    border: 1px solid var(--orange-dim);
+    padding: 2px 10px;
+  }
+  .clock-display {
+    font-size: 11px; letter-spacing: 2px;
+    color: var(--cyan);
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+
+  /* ─── Dashboard (3-column) ─── */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 260px 1fr 300px;
+    gap: 8px;
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  /* ─── Panel base (replaces cards) ─── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--cyan-border);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Corner brackets */
+  .panel::before {
+    content: '';
+    position: absolute; top: -1px; left: -1px;
+    width: 10px; height: 10px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+    z-index: 2;
+  }
+  .panel::after {
+    content: '';
+    position: absolute; bottom: -1px; right: -1px;
+    width: 10px; height: 10px;
+    border-bottom: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+    filter: drop-shadow(0 0 3px var(--cyan-glow));
+    z-index: 2;
+  }
+
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(0,232,208,0.08);
+    background: rgba(0,232,208,0.02);
+    flex-shrink: 0;
+  }
+  .panel-title {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+  .panel-badge {
+    font-size: 9px; letter-spacing: 1px; color: var(--text-dim);
+  }
+  .panel-body {
+    padding: 6px 10px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .panel-body::-webkit-scrollbar { width: 2px; }
+  .panel-body::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background: rgba(0,232,208,0.15); }
+
+  /* ─── Left column ─── */
+  .left-col {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  /* Nav items */
+  .nav-group { margin-bottom: 8px; }
+  .nav-group-label {
+    font-size: 8px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 4px 6px 2px;
+    border-bottom: 1px solid rgba(0,232,208,0.04);
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px;
+    font-size: 11px; letter-spacing: 1px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.12s;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover {
+    color: var(--cyan);
+    background: var(--cyan-ghost);
+  }
+  .nav-item.active {
+    color: var(--cyan-bright);
+    border-left-color: var(--cyan);
+    background: rgba(0,232,208,0.04);
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+  .nav-item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+
+  /* Metrics */
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .m-label { color: var(--text-dim); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  .m-val { color: var(--cyan); text-shadow: 0 0 4px rgba(0,232,208,0.2); }
+  .m-val.ok { color: var(--green); text-shadow: 0 0 4px rgba(0,255,136,0.3); }
+  .m-val.warn { color: var(--orange); text-shadow: 0 0 4px var(--orange-glow); }
+  .m-val.clu { color: var(--orange); text-shadow: 0 0 6px var(--orange-glow); }
+
+  /* ASCII bars */
+  .abar { font-size: 9px; color: var(--text-dim); line-height: 1.4; padding: 1px 0; }
+  .abar .fill { color: var(--cyan); text-shadow: 0 0 2px rgba(0,232,208,0.2); }
+
+  /* ─── Center column: Chat ─── */
+  .center-col {
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+
+  .chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .chat-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+  }
+  .chat-scroll::-webkit-scrollbar { width: 3px; }
+  .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: rgba(0,232,208,0.12); }
+
+  /* Chat header info */
+  .chat-header-info {
+    font-size: 10px; color: var(--text-dim);
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0,232,208,0.05);
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+
+  /* Terminal-style messages */
+  .msg-block { margin-bottom: 8px; }
+
+  .msg-line {
+    font-size: 12px; line-height: 1.65;
+  }
+  .prompt-user {
+    color: var(--cyan-bright);
+    text-shadow: 0 0 5px var(--cyan-glow);
+  }
+  .prompt-clu {
+    color: var(--orange);
+    text-shadow: 0 0 5px var(--orange-glow);
+  }
+  .prompt-tool {
+    color: var(--green);
+    text-shadow: 0 0 4px rgba(0,255,136,0.3);
+  }
+
+  .text-user { color: var(--text-bright); text-shadow: 0 0 1px rgba(0,232,208,0.08); }
+  .text-clu { color: var(--orange-bright); text-shadow: 0 0 2px rgba(255,149,0,0.15); }
+  .text-tool {
+    color: var(--cyan-dim); font-size: 11px;
+    padding-left: 14px;
+    border-left: 1px solid rgba(0,255,136,0.15);
+    margin: 3px 0 3px 6px;
+  }
+
+  .chat-sep {
+    border: none;
+    border-top: 1px solid rgba(0,232,208,0.04);
+    margin: 6px 0;
+  }
+
+  .cursor-blink {
+    display: inline-block;
+    width: 7px; height: 12px;
+    background: var(--cyan);
+    box-shadow: 0 0 5px var(--cyan-glow);
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+  }
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Chat input */
+  .chat-input-row {
+    display: flex; align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid rgba(0,232,208,0.1);
+    background: rgba(0,232,208,0.01);
+    gap: 0;
+    flex-shrink: 0;
+  }
+  .ci-prompt {
+    color: var(--cyan-bright);
+    text-shadow: 0 0 5px var(--cyan-glow);
+    font-size: 12px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .ci-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-bright);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    caret-color: var(--cyan);
+    text-shadow: 0 0 1px rgba(0,232,208,0.1);
+  }
+  .ci-field::placeholder { color: var(--text-dim); }
+
+  /* ─── Right column ─── */
+  .right-col {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  /* Channel rows */
+  .ch-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+  }
+  .ch-row:last-child { border-bottom: none; }
+  .ch-dot { width: 5px; height: 5px; flex-shrink: 0; }
+  .ch-dot.on { background: var(--green); box-shadow: 0 0 6px rgba(0,255,136,0.5); }
+  .ch-dot.off { background: var(--red); box-shadow: 0 0 4px rgba(255,51,85,0.3); opacity: 0.6; }
+  .ch-name { flex: 1; color: var(--cyan); }
+  .ch-info { color: var(--text-dim); font-size: 9px; }
+
+  /* Session rows */
+  .sess-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+  }
+  .sess-row:last-child { border-bottom: none; }
+  .sess-dot {
+    width: 5px; height: 5px;
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan-glow);
+    animation: sess-pulse 2.5s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes sess-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .sess-id {
+    color: var(--cyan-bright);
+    text-shadow: 0 0 4px var(--cyan-glow);
+    font-size: 10px; letter-spacing: 1px;
+    width: 34px;
+  }
+  .sess-src { flex: 1; color: var(--cyan); }
+  .sess-mdl { color: var(--text-dim); font-size: 9px; }
+
+  /* Activity rows */
+  .act-row {
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(0,232,208,0.03);
+    font-size: 10px; line-height: 1.5;
+  }
+  .act-row:last-child { border-bottom: none; }
+  .act-time { color: var(--text-dim); font-size: 9px; letter-spacing: 1px; }
+  .act-text { color: var(--cyan-dim); margin-top: 1px; }
+  .act-text .hl { color: var(--cyan); text-shadow: 0 0 3px rgba(0,232,208,0.2); }
+
+  /* Log rows */
+  .log-line {
+    font-size: 9px; line-height: 1.5;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .log-ts { color: var(--cyan-dim); }
+  .log-ok { color: var(--cyan-mid); }
+  .log-warn { color: var(--orange); text-shadow: 0 0 3px var(--orange-glow); }
+
+  /* ─── Bottom bar ─── */
+  .bottombar {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 14px;
+    border-top: 1px solid var(--cyan-border);
+    background: rgba(0,0,0,0.95);
+    font-size: 9px;
+    letter-spacing: 1px;
+    position: relative;
+  }
+  .bottombar::before {
+    content: '';
+    position: absolute; top: -1px; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-glow), transparent);
+    opacity: 0.2;
+  }
+  .bb-label {
+    color: var(--cyan);
+    text-shadow: 0 0 5px var(--cyan-glow);
+    letter-spacing: 3px; text-transform: uppercase;
+  }
+  .bb-sep { width: 1px; height: 12px; background: var(--cyan-border); }
+  .bb-item { color: var(--text-dim); display: flex; align-items: center; gap: 4px; }
+  .bb-dot { width: 3px; height: 3px; }
+  .bb-dot.ok { background: var(--green); box-shadow: 0 0 4px rgba(0,255,136,0.5); }
+  .bb-flex { flex: 1; }
+  .bb-key {
+    padding: 1px 5px;
+    border: 1px solid rgba(0,232,208,0.08);
+    color: var(--text-dim);
+    font-size: 8px;
+  }
+  .bb-clock {
+    color: var(--cyan);
+    text-shadow: 0 0 5px var(--cyan-glow);
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- CRT -->
+<div class="crt-scanlines"></div>
+<div class="crt-vignette"></div>
+<div class="crt-glow"></div>
+
+<!-- Grid -->
+<div class="grid-bg"></div>
+
+<!-- gmunk geometry -->
+<div class="geo-layer">
+  <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+    <!-- Outer rings (left) -->
+    <circle class="gr" cx="-60" cy="540" r="520"/>
+    <circle class="gr" cx="-60" cy="540" r="515"/>
+    <circle class="gr" cx="-60" cy="540" r="440"/>
+    <!-- Outer rings (right) -->
+    <circle class="gr" cx="1980" cy="540" r="520"/>
+    <circle class="gr" cx="1980" cy="540" r="515"/>
+    <circle class="gr" cx="1980" cy="540" r="440"/>
+
+    <!-- Technical lines top -->
+    <path class="gl" d="M0 42 L80 42 L95 28"/>
+    <path class="glb" d="M0 36 L70 36 L85 22"/>
+    <path class="gl" d="M1920 42 L1840 42 L1825 28"/>
+    <path class="glb" d="M1920 36 L1850 36 L1835 22"/>
+
+    <!-- Hexagon center accent -->
+    <polygon class="glb" points="960,30 970,36 970,48 960,54 950,48 950,36"/>
+
+    <!-- Vertical rule lines -->
+    <line class="gl" x1="268" y1="50" x2="268" y2="1054"/>
+    <line class="gl" x1="1612" y1="50" x2="1612" y2="1054"/>
+
+    <!-- Tick marks -->
+    <line class="glb" x1="264" y1="250" x2="272" y2="250"/>
+    <line class="glb" x1="264" y1="450" x2="272" y2="450"/>
+    <line class="glb" x1="264" y1="650" x2="272" y2="650"/>
+    <line class="glb" x1="264" y1="850" x2="272" y2="850"/>
+    <line class="glb" x1="1608" y1="250" x2="1616" y2="250"/>
+    <line class="glb" x1="1608" y1="450" x2="1616" y2="450"/>
+    <line class="glb" x1="1608" y1="650" x2="1616" y2="650"/>
+    <line class="glb" x1="1608" y1="850" x2="1616" y2="850"/>
+
+    <!-- Data dots -->
+    <circle class="gd" cx="95" cy="28" r="2"/>
+    <circle class="gd" cx="1825" cy="28" r="2"/>
+    <circle class="gd" cx="268" cy="250" r="1.5"/>
+    <circle class="gd" cx="268" cy="450" r="1.5"/>
+    <circle class="gd" cx="1612" cy="250" r="1.5"/>
+    <circle class="gd" cx="1612" cy="450" r="1.5"/>
+
+    <!-- Bottom connector lines -->
+    <path class="gl" d="M380 1054 L550 1054 L565 1040 L850 1040"/>
+    <path class="gl" d="M1070 1040 L1355 1040 L1370 1054 L1540 1054"/>
+
+    <!-- Arc top center -->
+    <path class="gl" d="M880 8 A 80 80 0 0 1 1040 8"/>
+    <path class="glb" d="M890 4 A 70 70 0 0 1 1030 4"/>
+  </svg>
+</div>
+
+<!-- Rotating ring -->
+<div class="ring-deco">
+  <svg width="700" height="700" viewBox="0 0 700 700">
+    <circle cx="350" cy="350" r="348" stroke="rgba(0,232,208,0.012)" stroke-width="0.5" fill="none"/>
+    <circle cx="350" cy="350" r="340" stroke="rgba(0,232,208,0.015)" stroke-width="0.5" fill="none" stroke-dasharray="6 18"/>
+    <circle cx="350" cy="350" r="330" stroke="rgba(0,232,208,0.008)" stroke-width="0.5" fill="none"/>
+    <line x1="350" y1="2" x2="350" y2="14" stroke="rgba(0,232,208,0.035)" stroke-width="0.5"/>
+    <line x1="350" y1="686" x2="350" y2="698" stroke="rgba(0,232,208,0.035)" stroke-width="0.5"/>
+    <line x1="2" y1="350" x2="14" y2="350" stroke="rgba(0,232,208,0.035)" stroke-width="0.5"/>
+    <line x1="686" y1="350" x2="698" y2="350" stroke="rgba(0,232,208,0.035)" stroke-width="0.5"/>
+  </svg>
+</div>
+
+
+<!-- ═══════════════════════════════════
+     SHELL
+     ═══════════════════════════════════ -->
+<div class="shell">
+
+  <!-- ── TOP BAR ── -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-ring">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
+      </div>
+      <span class="brand-name">OpenClaw</span>
+    </div>
+    <div class="topbar-sep"></div>
+    <div class="topbar-status">
+      <div class="ts-item"><div class="ts-dot ok"></div> Gateway</div>
+      <div class="ts-item"><div class="ts-dot ok"></div> Ollama</div>
+      <div class="ts-item"><div class="ts-dot ok"></div> 3 Channels</div>
+      <div class="ts-item"><div class="ts-dot off"></div> iMessage</div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="model-tag">CLU:LATEST</div>
+    <div class="topbar-sep"></div>
+    <span class="clock-display" id="clock">00:00:00</span>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div class="dashboard">
+
+    <!-- LEFT COLUMN -->
+    <div class="left-col">
+      <!-- Navigation -->
+      <div class="panel" style="flex:0 0 auto">
+        <div class="panel-head">
+          <span class="panel-title">Navigation</span>
+        </div>
+        <div class="panel-body">
+          <div class="nav-group">
+            <div class="nav-group-label">Command</div>
+            <div class="nav-item active">
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Chat
+            </div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              Overview
+            </div>
+          </div>
+          <div class="nav-group">
+            <div class="nav-group-label">Control</div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Channels
+            </div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9c.02-.65-.2-1.29-.57-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06c.53.37 1.17.59 1.82.57.65-.02 1.22-.37 1.51-1V3a2 2 0 0 1 4 0v.09c.29.63.86.98 1.51 1 .65.02 1.29-.2 1.82-.57l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06c-.37.53-.59 1.17-.57 1.82.02.65.37 1.22 1 1.51H21a2 2 0 0 1 0 4h-.09c-.63.29-.98.86-1 1.51z"/></svg>
+              Config
+            </div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Logs
+            </div>
+          </div>
+          <div class="nav-group">
+            <div class="nav-group-label">Agent</div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+              Skills
+            </div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Nodes
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Metrics -->
+      <div class="panel" style="flex:1">
+        <div class="panel-head">
+          <span class="panel-title">System</span>
+        </div>
+        <div class="panel-body">
+          <div class="metric-row"><span class="m-label">Gateway</span><span class="m-val ok">ONLINE</span></div>
+          <div class="metric-row"><span class="m-label">Uptime</span><span class="m-val">4h 23m 17s</span></div>
+          <div class="metric-row"><span class="m-label">Model</span><span class="m-val clu">clu:latest</span></div>
+          <div class="metric-row"><span class="m-label">Quantize</span><span class="m-val">Q8_0 · 8.5GB</span></div>
+          <div class="metric-row"><span class="m-label">Tick</span><span class="m-val">60s</span></div>
+          <div class="metric-row"><span class="m-label">Sessions</span><span class="m-val">3</span></div>
+          <div class="metric-row"><span class="m-label">API Calls</span><span class="m-val">847</span></div>
+          <div class="metric-row"><span class="m-label">Avg Lat.</span><span class="m-val">1.2s</span></div>
+          <div class="metric-row"><span class="m-label">Memory</span><span class="m-val warn">1.2 GB</span></div>
+          <div style="margin-top:6px">
+            <div class="abar">CPU  <span class="fill">████████</span>░░░░░░░░ 48%</div>
+            <div class="abar">MEM  <span class="fill">██████████████</span>░░ 82%</div>
+            <div class="abar">GPU  <span class="fill">███████████</span>░░░░░ 64%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER COLUMN: Chat -->
+    <div class="center-col">
+      <div class="panel chat-panel">
+        <div class="panel-head">
+          <span class="panel-title">Terminal — CLU</span>
+          <span class="panel-badge">session:7a3f</span>
+        </div>
+        <div class="chat-scroll">
+          <div class="chat-header-info">
+            --- OpenClaw Terminal v2026.1.30 ---<br>
+            --- connected to gateway :18789 ---<br>
+            --- model: clu:latest (Q8_0 / 8.5GB) ---
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-user">user@grid ~$</span>
+              <span class="text-user"> What's the status of all channels?</span>
+            </div>
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-tool">[tool]</span>
+              <span style="color:var(--green);font-size:10px"> channels.status</span>
+            </div>
+            <div class="text-tool">
+              discord    : connected  (3 guilds, last_msg: 2m)<br>
+              telegram   : connected  (12 chats, last_msg: 5m)<br>
+              imessage   : offline<br>
+              nostr      : connected  (2 relays)
+            </div>
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line"><span class="prompt-clu">CLU ›</span></div>
+            <div class="msg-line"><span class="text-clu">Channel diagnostics complete. Three of four pathways</span></div>
+            <div class="msg-line"><span class="text-clu">are operating within normal parameters.</span></div>
+            <div class="msg-line"><span class="text-clu">&nbsp;</span></div>
+            <div class="msg-line"><span class="text-clu" style="color:var(--green)">Discord</span><span class="text-clu"> — Fully operational. 3 guilds. Last: 2m ago.</span></div>
+            <div class="msg-line"><span class="text-clu" style="color:var(--green)">Telegram</span><span class="text-clu"> — Active on 12 interfaces. Flow nominal.</span></div>
+            <div class="msg-line"><span class="text-clu" style="color:var(--red)">iMessage</span><span class="text-clu"> — Bridge severed. Re-authentication required.</span></div>
+            <div class="msg-line"><span class="text-clu" style="color:var(--green)">Nostr</span><span class="text-clu"> — Broadcasting across 2 relays.</span></div>
+            <div class="msg-line"><span class="text-clu">&nbsp;</span></div>
+            <div class="msg-line"><span class="text-clu">The iMessage bridge requires your attention. Shall</span></div>
+            <div class="msg-line"><span class="text-clu">I initiate the reconnection sequence?</span></div>
+          </div>
+
+          <hr class="chat-sep">
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-user">user@grid ~$</span>
+              <span class="text-user"> Yes, reconnect iMessage</span>
+            </div>
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-tool">[tool]</span>
+              <span style="color:var(--green);font-size:10px"> channels.reconnect("imessage")</span>
+            </div>
+            <div class="text-tool">
+              imessage: reconnecting... auth_required (QR pending)
+            </div>
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line"><span class="prompt-clu">CLU ›</span></div>
+            <div class="msg-line"><span class="text-clu">The bridge requests re-authentication. A verification</span></div>
+            <div class="msg-line"><span class="text-clu">code has been generated. Navigate to Channels → iMessage</span></div>
+            <div class="msg-line"><span class="text-clu">and complete the handshake. I will confirm once the</span></div>
+            <div class="msg-line"><span class="text-clu">link is re-established. The Grid must be complete.</span></div>
+          </div>
+
+          <hr class="chat-sep">
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-user">user@grid ~$</span>
+              <span class="text-user"> Run the daily summary cron job</span>
+            </div>
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-tool">[tool]</span>
+              <span style="color:var(--green);font-size:10px"> cron.job.run("daily-summary") → triggered</span>
+            </div>
+          </div>
+
+          <div class="msg-block">
+            <div class="msg-line"><span class="prompt-clu">CLU ›</span></div>
+            <div class="msg-line"><span class="text-clu">The daily-summary process has been initiated. Activity</span></div>
+            <div class="msg-line"><span class="text-clu">metrics will compile across all channels. Expected</span></div>
+            <div class="msg-line"><span class="text-clu">completion: 45 seconds. Everything proceeds as designed.</span></div>
+          </div>
+
+          <hr class="chat-sep">
+
+          <div class="msg-block">
+            <div class="msg-line">
+              <span class="prompt-user">user@grid ~$</span>
+              <span class="cursor-blink"></span>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <span class="ci-prompt">user@grid ~$</span>
+          <input type="text" class="ci-field" autofocus>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+      <!-- Channels -->
+      <div class="panel" style="flex:0 0 auto">
+        <div class="panel-head">
+          <span class="panel-title">Channels</span>
+          <span class="panel-badge">3/4 online</span>
+        </div>
+        <div class="panel-body">
+          <div class="ch-row"><div class="ch-dot on"></div><span class="ch-name">Discord</span><span class="ch-info">3 guilds · 2m</span></div>
+          <div class="ch-row"><div class="ch-dot on"></div><span class="ch-name">Telegram</span><span class="ch-info">12 chats · 5m</span></div>
+          <div class="ch-row"><div class="ch-dot off"></div><span class="ch-name">iMessage</span><span class="ch-info">auth pending</span></div>
+          <div class="ch-row"><div class="ch-dot on"></div><span class="ch-name">Nostr</span><span class="ch-info">2 relays</span></div>
+        </div>
+      </div>
+
+      <!-- Sessions -->
+      <div class="panel" style="flex:0 0 auto">
+        <div class="panel-head">
+          <span class="panel-title">Sessions</span>
+          <span class="panel-badge">3 active</span>
+        </div>
+        <div class="panel-body">
+          <div class="sess-row"><div class="sess-dot"></div><span class="sess-id">7A3F</span><span class="sess-src">Control UI</span><span class="sess-mdl">clu:latest</span></div>
+          <div class="sess-row"><div class="sess-dot" style="animation-delay:.5s"></div><span class="sess-id">B2C1</span><span class="sess-src">Discord</span><span class="sess-mdl">clu:latest</span></div>
+          <div class="sess-row"><div class="sess-dot" style="animation-delay:1s"></div><span class="sess-id">E9D4</span><span class="sess-src">Telegram</span><span class="sess-mdl">clu:latest</span></div>
+        </div>
+      </div>
+
+      <!-- Activity -->
+      <div class="panel" style="flex:1; min-height:0">
+        <div class="panel-head">
+          <span class="panel-title">Activity</span>
+        </div>
+        <div class="panel-body">
+          <div class="act-row">
+            <div class="act-time">2M AGO</div>
+            <div class="act-text"><span class="hl">discord</span> message processed guild=#general</div>
+          </div>
+          <div class="act-row">
+            <div class="act-time">5M AGO</div>
+            <div class="act-text"><span class="hl">cron</span> daily-summary completed ok</div>
+          </div>
+          <div class="act-row">
+            <div class="act-time">12M AGO</div>
+            <div class="act-text"><span class="hl">telegram</span> 2 messages queued and sent</div>
+          </div>
+          <div class="act-row">
+            <div class="act-time">18M AGO</div>
+            <div class="act-text"><span class="hl">node</span> mac-mini heartbeat received</div>
+          </div>
+          <div class="act-row">
+            <div class="act-time">30M AGO</div>
+            <div class="act-text"><span class="hl">skill</span> web_search invoked ×3</div>
+          </div>
+          <div class="act-row">
+            <div class="act-time">1H AGO</div>
+            <div class="act-text"><span class="hl">config</span> reloaded after manual edit</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Log (compact) -->
+      <div class="panel" style="flex:1; min-height:0">
+        <div class="panel-head">
+          <span class="panel-title">Log</span>
+          <span class="panel-badge">live</span>
+        </div>
+        <div class="panel-body">
+          <div class="log-line"><span class="log-ts">08:42:31</span> <span class="log-ok">INF</span> chat.stream.final s=7A3F t=142</div>
+          <div class="log-line"><span class="log-ts">08:42:30</span> <span class="log-ok">INF</span> cron.run id=daily-summary</div>
+          <div class="log-line"><span class="log-ts">08:41:55</span> <span class="log-ok">INF</span> chat.send s=7A3F len=38</div>
+          <div class="log-line"><span class="log-ts">08:40:12</span> <span class="log-ok">INF</span> discord.msg guild=general</div>
+          <div class="log-line"><span class="log-ts">08:39:30</span> <span class="log-ok">INF</span> channels.reconnect imessage</div>
+          <div class="log-line"><span class="log-ts">08:38:44</span> <span class="log-warn">WRN</span> ollama.slow lat=3.2s</div>
+          <div class="log-line"><span class="log-ts">08:37:01</span> <span class="log-ok">INF</span> telegram.send chat=294</div>
+          <div class="log-line"><span class="log-ts">08:35:18</span> <span class="log-ok">INF</span> presence.hb node=mac-mini</div>
+          <div class="log-line"><span class="log-ts">08:33:00</span> <span class="log-ok">INF</span> tick ok s=3 ch=3/4</div>
+          <div class="log-line"><span class="log-ts">08:30:00</span> <span class="log-ok">INF</span> tick ok s=3 ch=3/4</div>
+          <div class="log-line"><span class="log-ts">08:28:42</span> <span class="log-warn">WRN</span> imessage.bridge lost</div>
+          <div class="log-line"><span class="log-ts">08:27:00</span> <span class="log-ok">INF</span> tick ok s=3 ch=4/4</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── BOTTOM BAR ── -->
+  <div class="bottombar">
+    <span class="bb-label">OpenClaw</span>
+    <div class="bb-sep"></div>
+    <div class="bb-item"><div class="bb-dot ok"></div> gateway:18789</div>
+    <div class="bb-item"><div class="bb-dot ok"></div> ollama:11434</div>
+    <div class="bb-item">model:clu:latest</div>
+    <div class="bb-item">Q8_0</div>
+    <div class="bb-flex"></div>
+    <span class="bb-key">⌘⇧O</span>
+    <div class="bb-sep"></div>
+    <span class="bb-clock" id="clock2">00:00:00</span>
+  </div>
+
+</div>
+
+<script>
+  function tick() {
+    const t = new Date().toTimeString().split(' ')[0];
+    document.getElementById('clock').textContent = t;
+    document.getElementById('clock2').textContent = t;
+  }
+  setInterval(tick, 1000);
+  tick();
+
+  // Auto-scroll
+  document.querySelector('.chat-scroll').scrollTop = 99999;
+</script>
+</body>
+</html>

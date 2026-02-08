@@ -65,6 +65,7 @@ export function buildEmbeddedSystemPrompt(params: {
     sandboxInfo: params.sandboxInfo,
     toolNames: params.tools.map((tool) => tool.name),
     toolSummaries: buildToolSummaryMap(params.tools),
+    skipToolSummaries: params.tools.length > 0,
     modelAliasLines: params.modelAliasLines,
     userTimezone: params.userTimezone,
     userTime: params.userTime,

@@ -1,12 +1,15 @@
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway";
 import type { Tab } from "./navigation";
 import type { UiSettings } from "./storage";
-import type { ThemeMode } from "./theme";
+import type { ThemeName } from "./theme";
 import type { ThemeTransitionContext } from "./theme-transition";
+import type { CardId, CardState, CanvasInteraction, SavedWorkspace } from "./canvas/canvas-types";
+import type { ModelEntry } from "./controllers/models";
 import type {
   AgentsListResult,
   ChannelsStatusSnapshot,
   ConfigSnapshot,
+  ConfigUiHints,
   CronJob,
   CronRunLogEntry,
   CronStatus,
@@ -26,6 +29,16 @@ import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exe
 import type { DevicePairingList } from "./controllers/devices";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form";
+import type { CompactionIndicatorStatus } from "./views/chat";
+import type { TtsStatusResult, TtsProviderEntry } from "./controllers/tts";
+
+export type ToastEntry = {
+  id: string;
+  ts: number;
+  severity: "info" | "warn" | "error" | "ok";
+  title: string;
+  message: string;
+};
 
 export type AppViewState = {
   settings: UiSettings;
@@ -34,9 +47,30 @@ export type AppViewState = {
   onboarding: boolean;
   basePath: string;
   connected: boolean;
-  theme: ThemeMode;
-  themeResolved: "light" | "dark";
+  theme: ThemeName;
+  themeResolved: string;
   hello: GatewayHelloOk | null;
+
+  // Canvas state
+  canvasPanX: number;
+  canvasPanY: number;
+  canvasScale: number;
+  canvasInteraction: CanvasInteraction;
+  canvasCards: Record<CardId, CardState>;
+  canvasFocusedCard: CardId | null;
+  canvasNextZ: number;
+  hudClockTime: number;
+  availableModels: ModelEntry[];
+  quickModels: string[];
+  modelPickerOpen: boolean;
+  quickPickerOpen: boolean;
+  activeModel: string | null;
+  ollamaOk: boolean | null;
+  lmstudioOk: boolean | null;
+  workspaces: SavedWorkspace[];
+  activeWorkspaceId: string | null;
+  workspaceNaming: boolean;
+  workspaceNameDraft: string;
   lastError: string | null;
   eventLog: EventLogEntry[];
   assistantName: string;
@@ -50,10 +84,15 @@ export type AppViewState = {
   chatMessages: unknown[];
   chatToolMessages: unknown[];
   chatStream: string | null;
+  chatStreamStartedAt: number | null;
   chatRunId: string | null;
-  chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  compactionStatus: CompactionIndicatorStatus | null;
+  sidebarOpen: boolean;
+  sidebarContent: string | null;
+  sidebarError: string | null;
+  splitRatio: number;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
   devicesLoading: boolean;
@@ -82,10 +121,13 @@ export type AppViewState = {
   configSnapshot: ConfigSnapshot | null;
   configSchema: unknown | null;
   configSchemaLoading: boolean;
-  configUiHints: Record<string, unknown>;
+  configUiHints: ConfigUiHints;
   configForm: Record<string, unknown> | null;
   configFormOriginal: Record<string, unknown> | null;
   configFormMode: "form" | "raw";
+  configSearchQuery: string;
+  configActiveSection: string | null;
+  configActiveSubsection: string | null;
   channelsLoading: boolean;
   channelsSnapshot: ChannelsStatusSnapshot | null;
   channelsError: string | null;
@@ -135,6 +177,11 @@ export type AppViewState = {
   debugCallParams: string;
   debugCallResult: string | null;
   debugCallError: string | null;
+  usageSummary: unknown | null;
+  toasts: ToastEntry[];
+  ttsStatus: TtsStatusResult | null;
+  ttsProviders: TtsProviderEntry[];
+  ttsBusy: boolean;
   logsLoading: boolean;
   logsError: string | null;
   logsFile: string | null;
@@ -145,10 +192,9 @@ export type AppViewState = {
   logsTruncated: boolean;
   client: GatewayBrowserClient | null;
   connect: () => void;
-  setTab: (tab: Tab) => void;
-  setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
+  setTheme: (theme: ThemeName, context?: ThemeTransitionContext) => void;
+  saveCanvasState: () => void;
   applySettings: (next: UiSettings) => void;
-  loadOverview: () => Promise<void>;
   loadAssistantIdentity: () => Promise<void>;
   loadCron: () => Promise<void>;
   handleWhatsAppStart: (force: boolean) => Promise<void>;
@@ -194,13 +240,25 @@ export type AppViewState = {
   setPassword: (next: string) => void;
   setSessionKey: (next: string) => void;
   setChatMessage: (next: string) => void;
-  handleChatSend: () => Promise<void>;
-  handleChatAbort: () => Promise<void>;
+  handleSendChat: (messageOverride?: string, opts?: { restoreDraft?: boolean }) => Promise<void>;
+  handleAbortChat: () => Promise<void>;
   handleChatSelectQueueItem: (id: string) => void;
   handleChatDropQueueItem: (id: string) => void;
   handleChatClearQueue: () => void;
+  handleChatScroll: (event: Event) => void;
+  handleOpenSidebar: (content: string) => void;
+  handleCloseSidebar: () => void;
+  handleSplitRatioChange: (ratio: number) => void;
+  removeQueuedMessage: (id: string) => void;
+  resetToolStream: () => void;
+  resetChatScroll: () => void;
   handleLogsFilterChange: (next: string) => void;
   handleLogsLevelFilterToggle: (level: LogLevel) => void;
   handleLogsAutoFollowToggle: (next: boolean) => void;
   handleCallDebugMethod: (method: string, params: string) => Promise<void>;
+  handleTtsToggle: (enabled: boolean) => Promise<void>;
+  handleTtsSetProvider: (provider: string) => Promise<void>;
+  pushToast: (severity: ToastEntry["severity"], title: string, message: string) => void;
+  dismissToast: (id: string) => void;
+  onCardOpen: (cardId: string) => void;
 };

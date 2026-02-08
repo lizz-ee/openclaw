@@ -1,14 +1,16 @@
-export type ThemeMode = "system" | "light" | "dark";
-export type ResolvedTheme = "light" | "dark";
+export type ThemeName = "grid" | "outlands" | "endofline";
 
-export function getSystemTheme(): ResolvedTheme {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return "dark";
-  }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
+export const THEME_NAMES: ThemeName[] = ["grid", "outlands", "endofline"];
 
-export function resolveTheme(mode: ThemeMode): ResolvedTheme {
-  if (mode === "system") return getSystemTheme();
-  return mode;
+export const THEME_LABELS: Record<ThemeName, string> = {
+  grid: "The Grid",
+  outlands: "The Outlands",
+  endofline: "End of Line",
+};
+
+export const DEFAULT_THEME: ThemeName = "grid";
+
+export function cycleTheme(current: ThemeName): ThemeName {
+  const idx = THEME_NAMES.indexOf(current);
+  return THEME_NAMES[(idx + 1) % THEME_NAMES.length];
 }

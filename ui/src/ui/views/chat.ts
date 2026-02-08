@@ -33,7 +33,6 @@ export type ChatProps = {
   toolMessages: unknown[];
   stream: string | null;
   streamStartedAt: number | null;
-  assistantAvatarUrl?: string | null;
   draft: string;
   queue: ChatQueueItem[];
   connected: boolean;
@@ -48,8 +47,6 @@ export type ChatProps = {
   sidebarContent?: string | null;
   sidebarError?: string | null;
   splitRatio?: number;
-  assistantName: string;
-  assistantAvatar: string | null;
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
@@ -172,6 +169,57 @@ function renderAttachmentPreview(props: ChatProps) {
   `;
 }
 
+function renderContextMeter(props: ChatProps) {
+  const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
+  const used = activeSession?.contextTokens;
+  const max = props.sessions?.defaults?.contextTokens;
+  if (used == null || !max) return nothing;
+
+  const ratio = Math.min(used / max, 1);
+  const pct = Math.round(ratio * 100);
+  const color = ratio > 0.85 ? "var(--red)" : ratio > 0.6 ? "var(--acc)" : "var(--green)";
+  const usedK = (used / 1000).toFixed(1);
+  const maxK = (max / 1000).toFixed(0);
+
+  return html`
+    <div class="context-meter">
+      <div class="context-meter-fill" style="width:${pct}%; background:${color}"></div>
+      <span class="context-meter-label">${usedK}k / ${maxK}k</span>
+    </div>
+  `;
+}
+
+function renderSessionSwitcher(props: ChatProps) {
+  const sessions = props.sessions?.sessions;
+
+  return html`
+    <div class="session-switcher">
+      ${sessions && sessions.length > 1 ? html`
+        <select
+          @change=${(e: Event) => {
+            const value = (e.target as HTMLSelectElement).value;
+            if (value !== props.sessionKey) props.onSessionKeyChange(value);
+          }}
+        >
+          ${sessions.map(
+            (s) => html`
+              <option value=${s.key} ?selected=${s.key === props.sessionKey}>
+                ${s.displayName ?? s.label ?? s.key}
+              </option>
+            `,
+          )}
+        </select>
+      ` : nothing}
+      <button
+        class="btn btn--sm"
+        ?disabled=${!props.connected}
+        @click=${props.onNewSession}
+        title="Start a new session"
+      >New session</button>
+    </div>
+  `;
+}
+
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
   const isBusy = props.sending || props.stream !== null;
@@ -179,11 +227,6 @@ export function renderChat(props: ChatProps) {
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
   const reasoningLevel = activeSession?.reasoningLevel ?? "off";
   const showReasoning = props.showThinking && reasoningLevel !== "off";
-  const assistantIdentity = {
-    name: props.assistantName,
-    avatar: props.assistantAvatar ?? props.assistantAvatarUrl ?? null,
-  };
-
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
   const composePlaceholder = props.connected
     ? hasAttachments
@@ -212,7 +255,7 @@ export function renderChat(props: ChatProps) {
         (item) => item.key,
         (item) => {
           if (item.kind === "reading-indicator") {
-            return renderReadingIndicatorGroup(assistantIdentity);
+            return renderReadingIndicatorGroup();
           }
 
           if (item.kind === "stream") {
@@ -220,7 +263,6 @@ export function renderChat(props: ChatProps) {
               item.text,
               item.startedAt,
               props.onOpenSidebar,
-              assistantIdentity,
             );
           }
 
@@ -228,8 +270,6 @@ export function renderChat(props: ChatProps) {
             return renderMessageGroup(item, {
               onOpenSidebar: props.onOpenSidebar,
               showReasoning,
-              assistantName: props.assistantName,
-              assistantAvatar: assistantIdentity.avatar,
             });
           }
 
@@ -241,6 +281,9 @@ export function renderChat(props: ChatProps) {
 
   return html`
     <section class="card chat">
+      ${renderSessionSwitcher(props)}
+      ${renderContextMeter(props)}
+
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
@@ -355,13 +398,12 @@ export function renderChat(props: ChatProps) {
             ></textarea>
           </label>
           <div class="chat-compose__actions">
-            <button
-              class="btn"
-              ?disabled=${!props.connected || (!canAbort && props.sending)}
-              @click=${canAbort ? props.onAbort : props.onNewSession}
-            >
-              ${canAbort ? "Stop" : "New session"}
-            </button>
+            ${canAbort ? html`
+              <button
+                class="btn"
+                @click=${props.onAbort}
+              >Stop</button>
+            ` : nothing}
             <button
               class="btn primary"
               ?disabled=${!props.connected}

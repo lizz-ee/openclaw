@@ -1,0 +1,6 @@
+{
+  "name": "openclaw-electron",
+  "private": true,
+  "type": "commonjs",
+  "main": "main.ts"
+}
