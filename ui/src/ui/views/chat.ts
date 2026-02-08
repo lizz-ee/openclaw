@@ -171,8 +171,8 @@ function renderAttachmentPreview(props: ChatProps) {
 
 function renderContextMeter(props: ChatProps) {
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
-  const used = activeSession?.contextTokens;
-  const max = props.sessions?.defaults?.contextTokens;
+  const used = activeSession?.totalTokens;
+  const max = activeSession?.contextTokens ?? props.sessions?.defaults?.contextTokens;
   if (used == null || !max) return nothing;
 
   const ratio = Math.min(used / max, 1);

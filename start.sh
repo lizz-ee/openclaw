@@ -57,14 +57,25 @@ cd "$REPO_DIR"
 pnpm build 2>&1 | tail -3
 echo -e "${green}✓${reset} Gateway built"
 
-# ─── Restart gateway (always fresh from dev build) ───
-if lsof -ti:$GATEWAY_PORT >/dev/null 2>&1; then
-  OLD_GW_PID=$(lsof -ti:$GATEWAY_PORT)
-  echo -e "${yellow}⚠${reset} Killing old gateway ${dim}(PID $OLD_GW_PID)${reset}"
-  kill $OLD_GW_PID 2>/dev/null
+# ─── Kill ALL existing gateway processes (dev build, global install, launchd) ───
+STALE_PIDS=$(pgrep -f "openclaw.*gateway|openclaw-gateway" 2>/dev/null)
+if [ -n "$STALE_PIDS" ]; then
+  echo -e "${yellow}⚠${reset} Killing existing gateway processes ${dim}(PIDs: $(echo $STALE_PIDS | tr '\n' ' '))${reset}"
+  echo "$STALE_PIDS" | xargs kill 2>/dev/null
   sleep 2
-  # Force-kill if still alive
-  lsof -ti:$GATEWAY_PORT >/dev/null 2>&1 && kill -9 $(lsof -ti:$GATEWAY_PORT) 2>/dev/null && sleep 1
+  # Force-kill any survivors
+  REMAINING=$(pgrep -f "openclaw.*gateway|openclaw-gateway" 2>/dev/null)
+  if [ -n "$REMAINING" ]; then
+    echo "$REMAINING" | xargs kill -9 2>/dev/null
+    sleep 1
+  fi
+fi
+# Also kill anything still holding the port (e.g. a non-openclaw process)
+if lsof -ti:$GATEWAY_PORT >/dev/null 2>&1; then
+  OLD_PORT_PID=$(lsof -ti:$GATEWAY_PORT)
+  echo -e "${yellow}⚠${reset} Port $GATEWAY_PORT still in use ${dim}(PID $OLD_PORT_PID)${reset} — killing"
+  kill -9 $OLD_PORT_PID 2>/dev/null
+  sleep 1
 fi
 
 echo -e "  Starting gateway from dev build..."
