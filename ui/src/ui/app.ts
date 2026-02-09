@@ -87,7 +87,13 @@ import {
 } from "./controllers/tts";
 import { loadLogs as loadLogsInternal } from "./controllers/logs";
 import { loadSessions as loadSessionsInternal } from "./controllers/sessions";
-import { loadSkills as loadSkillsInternal } from "./controllers/skills";
+import {
+  loadSkills as loadSkillsInternal,
+  updateSkillEnabled as updateSkillEnabledInternal,
+  installSkill as installSkillInternal,
+  updateSkillEdit as updateSkillEditInternal,
+  saveSkillApiKey as saveSkillApiKeyInternal,
+} from "./controllers/skills";
 import { loadPresence as loadPresenceInternal } from "./controllers/presence";
 import { loadNodes as loadNodesInternal } from "./controllers/nodes";
 import { loadChatHistory as loadChatHistoryInternal } from "./controllers/chat";
@@ -255,6 +261,7 @@ export class OpenClawApp extends LitElement {
   @state() skillsFilter = "";
   @state() skillEdits: Record<string, string> = {};
   @state() skillsBusyKey: string | null = null;
+  @state() skillDetailKey: string | null = null;
   @state() skillMessages: Record<string, SkillMessage> = {};
 
   @state() debugLoading = false;
@@ -540,6 +547,38 @@ export class OpenClawApp extends LitElement {
 
   async handleTtsSetProvider(provider: string) {
     await setTtsProviderInternal(this as unknown as Parameters<typeof setTtsProviderInternal>[0], provider);
+  }
+
+  // ─── Skill handlers ───
+
+  async handleLoadSkills() {
+    await loadSkillsInternal(this as unknown as Parameters<typeof loadSkillsInternal>[0]);
+  }
+
+  async handleToggleSkillEnabled(key: string, enabled: boolean) {
+    await updateSkillEnabledInternal(this as unknown as Parameters<typeof updateSkillEnabledInternal>[0], key, enabled);
+  }
+
+  async handleInstallSkill(key: string) {
+    const skill = this.skillsReport?.skills.find((s) => s.skillKey === key);
+    if (!skill || skill.install.length === 0) return;
+    const opt = skill.install[0];
+    await installSkillInternal(
+      this as unknown as Parameters<typeof installSkillInternal>[0],
+      key, skill.name, opt.id,
+    );
+  }
+
+  async handleUpdateSkill(_key: string) {
+    await loadSkillsInternal(this as unknown as Parameters<typeof loadSkillsInternal>[0]);
+  }
+
+  handleUpdateSkillEdit(key: string, value: string) {
+    updateSkillEditInternal(this as unknown as Parameters<typeof updateSkillEditInternal>[0], key, value);
+  }
+
+  async handleSaveSkillApiKey(key: string, _apiKey: string) {
+    await saveSkillApiKeyInternal(this as unknown as Parameters<typeof saveSkillApiKeyInternal>[0], key);
   }
 
   saveCanvasState() {

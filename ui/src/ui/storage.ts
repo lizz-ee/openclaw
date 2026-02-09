@@ -16,11 +16,23 @@ export type UiSettings = {
 };
 
 export function loadSettings(): UiSettings {
-  // start.sh passes ?resetSettings=1 to clear stale data on fresh launch
+  // start.sh passes ?resetSettings=1 to clear stale connection data on fresh launch.
+  // Only reset connection fields (gatewayUrl, token) — preserve user layout (canvasCards, workspaces, theme).
   if (typeof location !== "undefined") {
     const params = new URLSearchParams(location.search);
     if (params.get("resetSettings") === "1") {
-      localStorage.removeItem(KEY);
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw) {
+          const existing = JSON.parse(raw) as Record<string, unknown>;
+          delete existing.gatewayUrl;
+          delete existing.token;
+          localStorage.setItem(KEY, JSON.stringify(existing));
+        }
+      } catch {
+        // corrupt data — full reset
+        localStorage.removeItem(KEY);
+      }
       // Clean the URL so reloads don't keep resetting
       params.delete("resetSettings");
       const clean = params.toString();

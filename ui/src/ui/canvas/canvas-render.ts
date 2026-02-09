@@ -138,6 +138,7 @@ export function renderCanvas(state: AppViewState): TemplateResult {
     <!-- Modal overlays -->
     ${renderExecApprovalPrompt(state)}
     ${renderGatewayUrlConfirmation(state)}
+    ${renderSkillDetailPopup(state)}
 
     <!-- Toasts -->
     ${renderToasts(state)}
@@ -606,6 +607,42 @@ function renderSkillsContent(state: AppViewState): TemplateResult {
     ? skills.filter(s => s.name.toLowerCase().includes(needle) || s.description.toLowerCase().includes(needle))
     : skills;
   const eligible = skills.filter(s => s.eligible).length;
+  const busyKey = state.skillsBusyKey;
+
+  const handleChipClick = (skill: typeof skills[0], e: Event) => {
+    e.stopPropagation();
+    if (busyKey) return; // already busy
+    if (skill.eligible) {
+      // ON → disable
+      void state.handleToggleSkillEnabled(skill.skillKey, false);
+    } else if (skill.disabled) {
+      // OFF → enable
+      void state.handleToggleSkillEnabled(skill.skillKey, true);
+    } else if (skill.install.length > 0 && skill.missing.bins.length > 0) {
+      // NEED → install
+      void state.handleInstallSkill(skill.skillKey);
+    }
+  };
+
+  const chipLabel = (skill: typeof skills[0]) => {
+    if (busyKey === skill.skillKey) return '···';
+    if (skill.eligible) return 'ON';
+    if (skill.disabled) return 'OFF';
+    return 'NEED';
+  };
+
+  const chipClass = (skill: typeof skills[0]) => {
+    if (busyKey === skill.skillKey) return 'busy';
+    if (skill.eligible) return 'ok';
+    if (skill.disabled) return 'off';
+    return 'warn';
+  };
+
+  const isClickable = (skill: typeof skills[0]) =>
+    !busyKey && (skill.eligible || skill.disabled || (skill.install.length > 0 && skill.missing.bins.length > 0));
+
+  const truncDesc = (desc: string, max = 60) =>
+    desc.length > max ? desc.slice(0, max) + '…' : desc;
 
   return html`
     <div class="card-sub">${eligible}/${skills.length} eligible</div>
@@ -613,12 +650,127 @@ function renderSkillsContent(state: AppViewState): TemplateResult {
       .value=${state.skillsFilter}
       @input=${(e: Event) => { (state as Record<string, unknown>).skillsFilter = (e.target as HTMLInputElement).value; }} />
     ${filtered.map(skill => html`
-      <div class="skill-row">
+      <div class="skill-row clickable" title="${skill.description}"
+        @click=${() => { (state as Record<string, unknown>).skillDetailKey = skill.skillKey; }}>
         <span class="skill-emoji">${skill.emoji ?? ''}</span>
-        <span class="skill-name">${skill.name}</span>
-        <span class="chip ${skill.eligible ? 'ok' : skill.disabled ? 'off' : 'warn'}">${skill.eligible ? 'ON' : skill.disabled ? 'OFF' : 'NEED'}</span>
+        <div class="skill-info">
+          <span class="skill-name">${skill.name}</span>
+          ${skill.description ? html`<span class="skill-desc">${truncDesc(skill.description)}</span>` : nothing}
+        </div>
+        <span class="chip skill-chip ${chipClass(skill)} ${isClickable(skill) ? 'clickable' : ''}"
+          @click=${(e: Event) => handleChipClick(skill, e)}>${chipLabel(skill)}</span>
       </div>
     `)}
+  `;
+}
+
+// ─── SKILL DETAIL POPUP ───
+
+function renderSkillDetailPopup(state: AppViewState): TemplateResult | typeof nothing {
+  const key = state.skillDetailKey;
+  if (!key) return nothing;
+  const skill = state.skillsReport?.skills.find(s => s.skillKey === key);
+  if (!skill) return nothing;
+
+  const busy = state.skillsBusyKey === key;
+  const message = state.skillMessages[key] ?? null;
+  const apiKeyDraft = state.skillEdits[key] ?? "";
+  const canInstall = skill.install.length > 0 && skill.missing.bins.length > 0;
+  const missing = [
+    ...skill.missing.bins.map(b => `bin: ${b}`),
+    ...skill.missing.env.map(e => `env: ${e}`),
+    ...skill.missing.config.map(c => `config: ${c}`),
+    ...skill.missing.os.map(o => `os: ${o}`),
+  ];
+
+  const close = () => { (state as Record<string, unknown>).skillDetailKey = null; };
+
+  return html`
+    <div class="skill-popup-overlay" @click=${close}>
+      <div class="skill-popup" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="skill-popup-header">
+          <div class="skill-popup-title">
+            ${skill.emoji ? html`<span class="skill-popup-emoji">${skill.emoji}</span>` : nothing}
+            ${skill.name}
+          </div>
+          <button class="skill-popup-close" @click=${close}>×</button>
+        </div>
+
+        <div class="skill-popup-desc">${skill.description}</div>
+
+        <div class="skill-popup-chips">
+          <span class="chip">${skill.source}</span>
+          <span class="chip ${skill.eligible ? 'ok' : 'warn'}">${skill.eligible ? 'eligible' : 'blocked'}</span>
+          ${skill.disabled ? html`<span class="chip off">disabled</span>` : nothing}
+          ${skill.blockedByAllowlist ? html`<span class="chip warn">allowlisted</span>` : nothing}
+        </div>
+
+        ${missing.length > 0 ? html`
+          <div class="skill-popup-section">
+            <div class="skill-popup-label">Missing requirements</div>
+            <div class="skill-popup-missing">
+              ${missing.map(m => html`<span class="chip warn">${m}</span>`)}
+            </div>
+          </div>
+        ` : nothing}
+
+        ${message ? html`
+          <div class="skill-popup-message ${message.kind}">${message.message}</div>
+        ` : nothing}
+
+        <div class="skill-popup-actions">
+          <button class="skill-popup-btn ${skill.disabled ? 'primary' : ''}"
+            ?disabled=${busy}
+            @click=${() => void state.handleToggleSkillEnabled(skill.skillKey, skill.disabled)}>
+            ${busy ? '···' : skill.disabled ? 'Enable' : 'Disable'}
+          </button>
+          ${canInstall ? html`
+            <button class="skill-popup-btn primary"
+              ?disabled=${busy}
+              @click=${() => void state.handleInstallSkill(skill.skillKey)}>
+              ${busy ? 'Installing...' : skill.install[0].label}
+            </button>
+          ` : nothing}
+          ${skill.install.length > 1 ? skill.install.slice(1).map(opt => html`
+            <button class="skill-popup-btn"
+              ?disabled=${busy}
+              @click=${() => {
+                if (!state.client || busy) return;
+                state.skillsBusyKey = skill.skillKey;
+                void state.client.request("skills.install", {
+                  name: skill.name, installId: opt.id, timeoutMs: 120000,
+                }).then(() => void state.handleLoadSkills())
+                  .finally(() => { (state as Record<string, unknown>).skillsBusyKey = null; });
+              }}>
+              ${opt.label}
+            </button>
+          `) : nothing}
+        </div>
+
+        ${skill.primaryEnv ? html`
+          <div class="skill-popup-section">
+            <div class="skill-popup-label">API Key <span class="skill-popup-env">${skill.primaryEnv}</span></div>
+            <div class="skill-popup-key-row">
+              <input class="skill-popup-input" type="password"
+                placeholder="Enter API key..."
+                .value=${apiKeyDraft}
+                @input=${(e: Event) => state.handleUpdateSkillEdit(skill.skillKey, (e.target as HTMLInputElement).value)} />
+              <button class="skill-popup-btn primary"
+                ?disabled=${busy || !apiKeyDraft.trim()}
+                @click=${() => void state.handleSaveSkillApiKey(skill.skillKey, apiKeyDraft)}>
+                Save
+              </button>
+            </div>
+          </div>
+        ` : nothing}
+
+        ${skill.homepage ? html`
+          <div class="skill-popup-footer">
+            <a class="skill-popup-link" href="${skill.homepage}" target="_blank" rel="noopener">Documentation →</a>
+          </div>
+        ` : nothing}
+      </div>
+    </div>
   `;
 }
 
